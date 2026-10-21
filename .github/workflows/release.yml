@@ -22,9 +22,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Where GitHub Pages serves the gh-pages branch from; it is baked into the
-  # download URLs in index.yaml.
-  REPO_URL: https://klahio.github.io/charts
+  # The Helm repository URL, baked into the download URLs in index.yaml. This is
+  # the custom domain for the gh-pages branch, not the github.io default; the
+  # CNAME file written below is what makes GitHub Pages serve it there.
+  REPO_URL: https://charts.klah.io
 
 jobs:
   release:
@@ -92,6 +93,11 @@ jobs:
 
           # Jekyll would otherwise skip files it considers special.
           touch .pages/.nojekyll
+
+          # The custom domain lives in the published branch so that it survives
+          # every republish. Without it GitHub Pages falls back to the github.io
+          # address and the URLs in index.yaml stop resolving.
+          echo "charts.klah.io" > .pages/CNAME
 
           helm repo index .pages --url "$REPO_URL"
 

@@ -29,14 +29,16 @@ fails with instructions.
 From the published repository:
 
 ```bash
-helm repo add ai-stack-lite https://klahio.github.io/ai-stack-lite
+helm repo add klahio https://charts.klah.io
 helm repo update
-helm install ai ai-stack-lite/ai-stack-lite -n ai-stack --create-namespace
+helm install ai klahio/ai-stack-lite -n ai-stack --create-namespace
 ```
 
-From a checkout of this repository:
+From a checkout of this repository, where this chart is the `ai-stack-lite`
+directory:
 
 ```bash
+cd ai-stack-lite
 helm dependency build .
 helm install ai . -n ai-stack --create-namespace
 ```

@@ -6,10 +6,10 @@ version: 0.1.0
 appVersion: "0.1.0"
 kubeVersion: ">=1.24.0-0"
 keywords: [ai, llm, ollama, open-webui, comfyui, gpu, on-prem, self-hosted]
-home: https://github.com/klahio/ai-stack-lite
-icon: https://raw.githubusercontent.com/klahio/ai-stack-lite/main/icon.svg
+home: https://github.com/klahio/charts/tree/main/ai-stack-lite
+icon: https://raw.githubusercontent.com/klahio/charts/main/ai-stack-lite/icon.svg
 sources:
-  - https://github.com/klahio/ai-stack-lite
+  - https://github.com/klahio/charts/tree/main/ai-stack-lite
   - https://github.com/ollama/ollama
   - https://github.com/open-webui/open-webui
   - https://github.com/comfyanonymous/ComfyUI
@@ -22,9 +22,9 @@ annotations:
   artifacthub.io/category: ai-machine-learning
   artifacthub.io/links: |
     - name: source
-      url: https://github.com/klahio/ai-stack-lite
+      url: https://github.com/klahio/charts/tree/main/ai-stack-lite
     - name: GPU setup notes
-      url: https://github.com/klahio/ai-stack-lite#gpu-setup
+      url: https://github.com/klahio/charts/tree/main/ai-stack-lite#gpu-setup
   artifacthub.io/images: |
     - name: ollama
       image: ollama/ollama:0.40.6
