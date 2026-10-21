@@ -42,7 +42,19 @@ The first account you register becomes the administrator.
 
 {{- if index .Values "ollama" "enabled" }}
 
-No models are installed by default. Pull one:
+{{- $models := (index .Values "ollama" "modelPuller" | default dict).models }}
+{{- if $models }}
+Pulled on install by a Job, which may still be running:
+{{ range $models }}
+  {{ . }}
+{{- end }}
+
+  kubectl -n {{ .Release.Namespace }} logs job/{{ .Release.Name }}-ollama-model-puller
+
+Pull another at any time:
+{{- else }}
+No models are installed. Pull one:
+{{- end }}
 
   kubectl -n {{ .Release.Namespace }} exec -it statefulset/{{ .Release.Name }}-ollama -- ollama pull llama3.2:3b
 
@@ -52,6 +64,15 @@ want the space back.
 {{- end }}
 
 {{- if index .Values "comfyui" "enabled" }}
+
+{{- $ckpts := (.Values.comfyui.modelDownloader | default dict).models }}
+{{- if $ckpts }}
+ComfyUI fetches its weights before it starts, so a first install leaves the pod
+in Init until they are on disk:
+{{ range $ckpts }}
+  {{ .dir }}/{{ .name }}
+{{- end }}
+{{- end }}
 
 ComfyUI has no Ingress and no authentication. Reach it over a port-forward:
 
