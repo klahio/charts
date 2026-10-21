@@ -7,6 +7,10 @@ metadata:
     {{- include "common.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  {{- /* First boot builds the virtualenv and fetches the models, which
+         outruns the 600s default and fails `helm install --wait` on a
+         deployment that is still progressing. */}}
+  progressDeadlineSeconds: {{ .Values.progressDeadlineSeconds }}
   strategy:
     type: {{ .Values.strategy.type }}
   selector:
@@ -32,9 +36,51 @@ spec:
       {{- end }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- include "common.scheduling" . | nindent 6 }}
-      {{- if .Values.fixVolumeOwnership.enabled }}
+      {{- if or .Values.fixVolumeOwnership.enabled (and .Values.modelDownloader.enabled .Values.modelDownloader.models) }}
       initContainers:
+        {{- if .Values.fixVolumeOwnership.enabled }}
         {{- include "common.chownInit" (dict "ctx" . "uid" .Values.podUser.uid "gid" .Values.podUser.gid "image" .Values.fixVolumeOwnership.image) | nindent 8 }}
+        {{- end }}
+        {{- if and .Values.modelDownloader.enabled .Values.modelDownloader.models }}
+        - name: fetch-models
+          image: {{ .Values.modelDownloader.image }}
+          imagePullPolicy: IfNotPresent
+          {{- /* Runs as root so the finished file can be handed to the uid the
+                 image expects; ComfyUI's entrypoint refuses to start when a
+                 model directory is owned by anyone else. */}}
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              root={{ .Values.persistence.models.mountPath | quote }}
+              {{- range .Values.modelDownloader.models }}
+              dir="$root/{{ .dir }}"
+              mkdir -p "$dir"
+              if [ -s "$dir/{{ .name }}" ]; then
+                echo "{{ .dir }}/{{ .name }} already present, skipping"
+              else
+                echo "fetching {{ .dir }}/{{ .name }}"
+                {{- /* Download to a .part file and rename, so an interrupted
+                       pull is retried rather than left as a truncated model
+                       that only fails later, inside a workflow. */}}
+                curl -fL --retry 5 --retry-delay 5 -o "$dir/{{ .name }}.part" {{ .url | quote }}
+                mv "$dir/{{ .name }}.part" "$dir/{{ .name }}"
+              fi
+              chown {{ $.Values.podUser.uid }}:{{ $.Values.podUser.gid }} "$dir" "$dir/{{ .name }}"
+              chmod 0775 "$dir"
+              chmod 0664 "$dir/{{ .name }}"
+              {{- end }}
+              echo "models ready"
+          volumeMounts:
+            - name: models
+              mountPath: {{ .Values.persistence.models.mountPath }}
+          resources:
+            {{- toYaml .Values.modelDownloader.resources | nindent 12 }}
+        {{- end }}
       {{- end }}
       containers:
         - name: comfyui

@@ -23,6 +23,10 @@ ollama:
 
 open-webui:
   enabled: true
+  # Nothing to generate images with once ComfyUI is out, and an enabled image
+  # button that points at a service that does not exist is worse than no button.
+  imageGeneration:
+    enabled: false
 
 comfyui:
   enabled: false

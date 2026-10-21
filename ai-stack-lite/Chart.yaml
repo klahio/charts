@@ -2,8 +2,8 @@ apiVersion: v2
 name: ai-stack-lite
 description: Self-hosted AI stack for on-prem Kubernetes - Ollama for LLM inference, Open WebUI as the chat frontend, ComfyUI for image generation.
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.2.0
+appVersion: "0.2.0"
 kubeVersion: ">=1.24.0-0"
 keywords: [ai, llm, ollama, open-webui, comfyui, gpu, on-prem, self-hosted]
 home: https://github.com/klahio/charts/tree/main/ai-stack-lite
@@ -34,11 +34,11 @@ annotations:
       image: mmartial/comfyui-nvidia-docker:ubuntu24_cuda13.4-20261018
   artifacthub.io/changes: |
     - kind: added
-      description: Initial release with Ollama, Open WebUI and ComfyUI subcharts
+      description: A default install now arrives with a model - Ollama pulls llama3.2:3b and ComfyUI fetches an SD 1.5 checkpoint
     - kind: added
-      description: Install-time checks for GPU, RuntimeClass, StorageClass and ingress
-    - kind: added
-      description: Gateway API HTTPRoute as an alternative to Ingress
+      description: Open WebUI is wired to the stack's ComfyUI, so image generation works without manual admin settings
+    - kind: fixed
+      description: ComfyUI no longer overruns the deployment progress deadline while it builds its virtualenv on a fresh volume
 dependencies:
   # Library chart. Renders nothing on its own; it carries the template helpers
   # the three component charts share. Declared here as well as in each subchart
@@ -47,14 +47,14 @@ dependencies:
     version: 0.1.0
     repository: ""
   - name: ollama
-    version: 0.1.0
+    version: 0.2.0
     repository: ""
     condition: ollama.enabled
   - name: open-webui
-    version: 0.1.0
+    version: 0.2.0
     repository: ""
     condition: open-webui.enabled
   - name: comfyui
-    version: 0.1.0
+    version: 0.2.0
     repository: ""
     condition: comfyui.enabled

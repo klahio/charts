@@ -12,6 +12,12 @@ Each component is a subchart and can be switched off on its own. A library chart
 under `charts/common` holds the template helpers the three share, so naming,
 labels, scheduling, persistence and GPU handling follow one set of rules.
 
+A default install arrives usable rather than empty: Ollama pulls `llama3.2:3b`
+after install, ComfyUI fetches an SD 1.5 checkpoint before it starts, and Open
+WebUI is pointed at both, so the chat window answers and the image button works
+with no admin settings to fill in. Both downloads are listed in values and can
+be emptied; see [What a default install downloads](#what-a-default-install-downloads).
+
 ## Prerequisites
 
 - Kubernetes 1.24 or newer, and Helm 3.8 or newer
@@ -51,6 +57,53 @@ helm install ai . -n ai-stack --create-namespace -f values-single-gpu.yaml
 
 # no GPU at all; Ollama on CPU, ComfyUI left out
 helm install ai . -n ai-stack --create-namespace -f values-cpu.yaml
+```
+
+## What a default install downloads
+
+The stack is useless without weights, and weights are the one thing neither
+upstream image ships. So the chart fetches a small set by default. Nothing is
+downloaded twice: both checks are for a file that is already there.
+
+| What | Where from | Size | Set by |
+|---|---|---|---|
+| `llama3.2:3b` | Ollama registry | ~2 GB | `ollama.modelPuller.models` |
+| `v1-5-pruned-emaonly.safetensors` | Hugging Face | ~4 GB | `comfyui.modelDownloader.models` |
+
+The LLM is pulled by a post-install Job, so it lands after the release is
+reported installed. The checkpoint is fetched by an init container, which means
+the ComfyUI pod stays `Init` until it is on disk; on a slow link a first install
+takes a while to go Ready, and `helm install --wait` should be given a timeout
+to match:
+
+```bash
+helm install ai klahio/ai-stack-lite -n ai-stack --create-namespace --wait --timeout 30m
+```
+
+To install with nothing at all and manage weights yourself:
+
+```yaml
+ollama:
+  modelPuller:
+    models: []
+comfyui:
+  modelDownloader:
+    models: []
+```
+
+Adding another checkpoint, a LoRA or a VAE is the same list; `dir` is the
+directory under ComfyUI's `models/`:
+
+```yaml
+comfyui:
+  modelDownloader:
+    models:
+      - dir: checkpoints
+        name: v1-5-pruned-emaonly.safetensors
+        url: https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors
+      - dir: vae
+        name: vae-ft-mse-840000-ema-pruned.safetensors
+        url: https://huggingface.co/stabilityai/sd-vae-ft-mse-original/resolve/main/vae-ft-mse-840000-ema-pruned.safetensors
 ```
 
 ## Exposing the frontend
@@ -310,8 +363,20 @@ an image that takes plain arguments, set `comfyui.command` and `comfyui.args`.
 
 ## Image generation from the chat box
 
-Asking for an image in chat needs one setting beyond pointing Open WebUI at
-ComfyUI, and without it the failure is silent.
+Open WebUI defaults to OpenAI's hosted image API with an empty key, so the chart
+points it at the ComfyUI in the same release instead: engine, base URL, model,
+size, steps and the node mapping onto Open WebUI's built-in workflow are all set
+from `open-webui.imageGeneration`.
+
+One thing to know about changing these: they are Open WebUI *PersistentConfig*
+settings. The values are read on a first start and then kept in Open WebUI's own
+database, so editing them for a release whose data volume already exists has no
+effect. Change them in **Admin Settings -> Images**, or delete the Open WebUI
+data PVC to start over. `open-webui.imageGeneration.model` must name a
+checkpoint ComfyUI actually has; it defaults to the one the downloader fetches.
+
+Asking for an image in chat then needs one more setting, and without it the
+failure is silent.
 
 Open WebUI has two routes. The default route gives the model a `generate_image`
 tool and waits for the model to call it. That tool is not actually offered to
@@ -338,13 +403,8 @@ installation can look healthy while the chat box does not produce images.
 
 ## Models
 
-None are installed by default. Pull one into the running pod:
-
-```bash
-kubectl -n ai-stack exec -it statefulset/ai-ollama -- ollama pull llama3.2:3b
-```
-
-Or have the chart do it once on install:
+`llama3.2:3b` is pulled on install. Change the list, or empty it to install with
+no model at all:
 
 ```yaml
 ollama:
@@ -353,6 +413,12 @@ ollama:
     models:
       - llama3.2:3b
       - qwen2.5-coder:7b
+```
+
+Anything else goes into the running pod the usual way:
+
+```bash
+kubectl -n ai-stack exec -it statefulset/ai-ollama -- ollama pull qwen2.5-coder:7b
 ```
 
 That runs as a `post-install` hook, not `post-upgrade`, so a slow link cannot
@@ -399,6 +465,10 @@ Settings that apply to the whole stack live under `global`.
 | `ollama.enabled` | `true` | |
 | `open-webui.enabled` | `true` | |
 | `comfyui.enabled` | `true` | |
+| `ollama.modelPuller.models` | `[llama3.2:3b]` | Pulled by a post-install Job. Empty it to install with no model. |
+| `comfyui.modelDownloader.models` | SD 1.5 checkpoint | Fetched by an init container before ComfyUI starts. |
+| `open-webui.imageGeneration.enabled` | `true` | Points the image button at this release's ComfyUI. |
+| `comfyui.progressDeadlineSeconds` | `3600` | First boot builds a virtualenv and downloads weights. |
 
 GPU precedence runs built-in default, then `global.gpu`, then the component's own
 `gpu` block, resolved key by key. Ollama and ComfyUI leave their component block

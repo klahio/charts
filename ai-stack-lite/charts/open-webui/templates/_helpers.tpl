@@ -21,6 +21,25 @@ hand.
 {{- end -}}
 {{- end -}}
 
+{{/*
+Resolve the ComfyUI endpoint, by the same rule as the Ollama one above: an
+explicit url wins, otherwise the sibling subchart's service in this release.
+*/}}
+{{- define "open-webui.comfyuiUrl" -}}
+{{- if .Values.imageGeneration.comfyui.url -}}
+{{- .Values.imageGeneration.comfyui.url -}}
+{{- else -}}
+{{- $name := "comfyui" -}}
+{{- $fullname := "" -}}
+{{- if contains $name .Release.Name -}}
+{{- $fullname = .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $fullname = printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- printf "http://%s.%s.svc.cluster.local:8188" $fullname .Release.Namespace -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "open-webui.secretName" -}}
 {{- .Values.auth.existingSecret | default (printf "%s-auth" (include "common.fullname" .)) -}}
 {{- end -}}

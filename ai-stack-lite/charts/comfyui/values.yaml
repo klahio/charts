@@ -128,6 +128,30 @@ persistence:
 #
 # Other values: lowvram, novram, highvram, gpu-only, cpu. highvram and gpu-only
 # pin weights in VRAM and will starve anything else on the same GPU.
+# First boot has no weights. ComfyUI ships none, and an install that comes up
+# with an empty checkpoint list fails at the first node of every workflow, which
+# reads as a broken chart rather than a missing download. Each entry below is
+# fetched into models/<dir> once; a file already present is left alone, so pod
+# restarts and upgrades cost nothing. Set models to [] to bring your own.
+modelDownloader:
+  enabled: true
+  image: curlimages/curl:8.17.0
+  models:
+    - dir: checkpoints
+      name: v1-5-pruned-emaonly.safetensors
+      url: https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# A first start installs ComfyUI and its python dependencies into the run volume
+# and downloads the models above. On a fresh volume that is tens of minutes,
+# well past the Kubernetes default of 600s, and a deployment that overruns the
+# deadline makes `helm install --wait` report failure while the pod is still
+# making progress.
+progressDeadlineSeconds: 3600
+
 vramMode: default
 
 # GB of VRAM to leave free for other software, passed as --reserve-vram.

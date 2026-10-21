@@ -2,7 +2,7 @@ apiVersion: v2
 name: comfyui
 description: comfyui component of the ai-stack-lite stack
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "v0.3.40"
 kubeVersion: ">=1.24.0-0"
 dependencies:

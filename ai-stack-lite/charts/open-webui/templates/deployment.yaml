@@ -52,6 +52,24 @@ spec:
             {{- end }}
             - name: ENABLE_SIGNUP
               value: {{ .Values.auth.enableSignup | quote }}
+            {{- if .Values.imageGeneration.enabled }}
+            - name: ENABLE_IMAGE_GENERATION
+              value: "true"
+            - name: IMAGE_GENERATION_ENGINE
+              value: {{ .Values.imageGeneration.engine | quote }}
+            {{- if eq .Values.imageGeneration.engine "comfyui" }}
+            - name: COMFYUI_BASE_URL
+              value: {{ include "open-webui.comfyuiUrl" . | quote }}
+            - name: COMFYUI_WORKFLOW_NODES
+              value: {{ .Values.imageGeneration.workflowNodes | toJson | quote }}
+            {{- end }}
+            - name: IMAGE_GENERATION_MODEL
+              value: {{ .Values.imageGeneration.model | quote }}
+            - name: IMAGE_SIZE
+              value: {{ .Values.imageGeneration.size | quote }}
+            - name: IMAGE_STEPS
+              value: {{ .Values.imageGeneration.steps | quote }}
+            {{- end }}
             - name: WEBUI_SECRET_KEY
               valueFrom:
                 secretKeyRef:

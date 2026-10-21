@@ -2,7 +2,7 @@ apiVersion: v2
 name: open-webui
 description: open-webui component of the ai-stack-lite stack
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "0.12.3"
 kubeVersion: ">=1.24.0-0"
 dependencies:

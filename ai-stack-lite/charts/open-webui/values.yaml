@@ -85,6 +85,51 @@ ollama:
   enabled: true
   url: ""
 
+# Image generation through the ComfyUI in this stack. Open WebUI defaults to
+# OpenAI's hosted API and an empty key, so without this the stack ships a
+# ComfyUI nobody can reach from the chat window.
+#
+# These are PersistentConfig settings: Open WebUI reads them on a first start
+# and then keeps them in its own database. Changing them on an install that
+# already has a data volume has no effect; change them in Admin Settings ->
+# Images instead.
+imageGeneration:
+  enabled: true
+  engine: comfyui
+  comfyui:
+    # Defaults to the ComfyUI service of this release.
+    url: ""
+  # Must name a checkpoint ComfyUI actually has. The default matches the one
+  # comfyui.modelDownloader fetches.
+  model: v1-5-pruned-emaonly.safetensors
+  size: 512x512
+  steps: 20
+  # Maps the prompt and the parameters above onto Open WebUI's built-in ComfyUI
+  # workflow. Without the mapping the workflow keeps its placeholder checkpoint
+  # name and every generation fails at the loader.
+  workflowNodes:
+    - type: model
+      key: ckpt_name
+      node_ids: ["4"]
+    - type: prompt
+      key: text
+      node_ids: ["6"]
+    - type: negative_prompt
+      key: text
+      node_ids: ["7"]
+    - type: width
+      key: width
+      node_ids: ["5"]
+    - type: height
+      key: height
+      node_ids: ["5"]
+    - type: steps
+      key: steps
+      node_ids: ["3"]
+    - type: seed
+      key: seed
+      node_ids: ["3"]
+
 auth:
   # Signing key for session cookies. Left empty, the chart generates one on first
   # install and keeps it across upgrades, so sessions survive a helm upgrade.

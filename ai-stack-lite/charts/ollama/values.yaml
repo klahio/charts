@@ -130,12 +130,15 @@ priorityClassName: ""
 
 terminationGracePeriodSeconds: 60
 
-# Pull models once, after install, as a Job. Leave empty to manage models by
-# hand with `ollama pull` inside the pod.
+# Pulled once, after install, by a Job that talks to the Ollama API. Without a
+# model the stack installs cleanly and then has nothing to answer with, so the
+# default is a small general-purpose one that leaves room for image generation
+# on a single 16 GB card. Set models to [] to install empty and pull by hand
+# with `ollama pull` inside the pod.
 modelPuller:
-  enabled: false
-  models: []
-  #  - llama3.2:3b
+  enabled: true
+  models:
+    - llama3.2:3b
   #  - qwen2.5-coder:7b
   backoffLimit: 2
   resources:
