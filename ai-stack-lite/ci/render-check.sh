@@ -13,7 +13,11 @@ echo "==> helm dependency build"
 helm dependency build . >/dev/null
 for c in charts/*/; do
   [[ -f "$c/Chart.yaml" ]] || continue
-  grep -q '^dependencies:' "$c/Chart.yaml" && helm dependency build "$c" >/dev/null
+  # Not every subchart has dependencies; the library chart has none. An `a && b`
+  # whose left side fails would end the script under `set -e`.
+  if grep -q '^dependencies:' "$c/Chart.yaml"; then
+    helm dependency build "$c" >/dev/null
+  fi
 done
 
 echo "==> helm lint"

@@ -1,0 +1,42 @@
+name: lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      # Every top-level directory holding a Chart.yaml is a chart in this
+      # repository. A chart that carries its own ci/render-check.sh is checked
+      # with that script, which renders each profile and each subchart
+      # standalone; anything else falls back to a plain lint. The install-time
+      # checks are skipped here because `helm template` performs no lookups,
+      # which is what lets this run without a cluster.
+      - name: render and lint every chart
+        run: |
+          shopt -s nullglob
+          found=false
+          for manifest in */Chart.yaml; do
+            dir=${manifest%/Chart.yaml}
+            found=true
+            echo "==> $dir"
+            if [ -x "$dir/ci/render-check.sh" ]; then
+              "$dir/ci/render-check.sh"
+            else
+              helm dependency build "$dir"
+              helm lint "$dir"
+            fi
+          done
+          if [ "$found" = false ]; then
+            echo "no charts found at the repository root" >&2
+            exit 1
+          fi
