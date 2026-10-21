@@ -2,7 +2,7 @@ apiVersion: v2
 name: ai-stack-lite
 description: Self-hosted AI stack for on-prem Kubernetes - Ollama for LLM inference, Open WebUI as the chat frontend, ComfyUI for image generation.
 type: application
-version: 0.2.1
+version: 0.2.2
 appVersion: "0.2.0"
 kubeVersion: ">=1.24.0-0"
 keywords: [ai, llm, ollama, open-webui, comfyui, gpu, on-prem, self-hosted]
@@ -34,6 +34,8 @@ annotations:
       image: mmartial/comfyui-nvidia-docker:ubuntu24_cuda13.4-20261018
   artifacthub.io/changes: |
     - kind: fixed
+      description: Open WebUI no longer restarts once on the first upgrade after an install, from a session key hashed before it was settled
+    - kind: fixed
       description: NOTES now reflect the models the chart installs rather than telling you there are none
     - kind: added
       description: A default install now arrives with a model - Ollama pulls llama3.2:3b and ComfyUI fetches an SD 1.5 checkpoint
@@ -53,7 +55,7 @@ dependencies:
     repository: ""
     condition: ollama.enabled
   - name: open-webui
-    version: 0.2.0
+    version: 0.2.1
     repository: ""
     condition: open-webui.enabled
   - name: comfyui

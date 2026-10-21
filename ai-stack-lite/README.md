@@ -433,7 +433,10 @@ open endpoint. ComfyUI's workflow API can read and write files inside its
 container.
 
 Open WebUI's session signing key is generated on first install and read back from
-the existing Secret on upgrade, so an upgrade does not log everyone out. Supply
+the existing Secret on upgrade, so an upgrade does not log everyone out. It is
+generated once per render and remembered, because the Deployment hashes it into
+a restart annotation as well; generating it twice would hash a key nothing uses
+and restart the pod on the next upgrade for no reason. Supply
 your own instead:
 
 ```yaml

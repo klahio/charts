@@ -7,9 +7,9 @@ dependencies:
   version: 0.2.0
 - name: open-webui
   repository: ""
-  version: 0.2.0
+  version: 0.2.1
 - name: comfyui
   repository: ""
   version: 0.2.0
-digest: sha256:3fb939bc534eb9ae781c4ba1d5706180a030b5547feb606433ea2715549c511d
-generated: "2026-10-20T23:17:21.622174481-04:00"
+digest: sha256:23809f10fcfac9419990f69ccb69bd2da8a4a94a51252ce270d45509ee2a6b21
+generated: "2026-10-20T23:40:25.749198892-04:00"

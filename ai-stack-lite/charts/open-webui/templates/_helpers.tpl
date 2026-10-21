@@ -57,7 +57,15 @@ generate on a genuinely first install.
 {{- if and $existing $existing.data (index $existing.data "WEBUI_SECRET_KEY") -}}
 {{- index $existing.data "WEBUI_SECRET_KEY" | b64dec -}}
 {{- else -}}
-{{- randAlphaNum 48 -}}
+{{- /* Generated once per render and remembered, because this helper is called
+       from both the Secret and the Deployment's checksum annotation. Calling
+       randAlphaNum twice hands them different keys, and the annotation then
+       hashes a value nothing ever used: the install looks fine, and the first
+       upgrade afterwards restarts the pod for no reason. */}}
+{{- if not .Values.generatedSecretKey -}}
+{{- $_ := set .Values "generatedSecretKey" (randAlphaNum 48) -}}
+{{- end -}}
+{{- .Values.generatedSecretKey -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
