@@ -30,7 +30,7 @@ entries:
       artifacthub.io/prerelease: "true"
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-21T21:20:35.839201162Z"
+    created: "2026-10-21T17:21:00.186288405-04:00"
     dependencies:
     - name: common
       repository: ""
@@ -75,4 +75,216 @@ entries:
     urls:
     - https://charts.klah.io/ai-stack-lite-0.2.2.tgz
     version: 0.2.2
-generated: "2026-10-21T21:20:35.834663225Z"
+  - annotations:
+      artifacthub.io/category: ai-machine-learning
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: NOTES now reflect the models the chart installs rather than telling you there are none
+        - kind: added
+          description: A default install now arrives with a model - Ollama pulls llama3.2:3b and ComfyUI fetches an SD 1.5 checkpoint
+        - kind: added
+          description: Open WebUI is wired to the stack's ComfyUI, so image generation works without manual admin settings
+        - kind: fixed
+          description: ComfyUI no longer overruns the deployment progress deadline while it builds its virtualenv on a fresh volume
+      artifacthub.io/images: |
+        - name: ollama
+          image: ollama/ollama:0.40.6
+        - name: open-webui
+          image: ghcr.io/open-webui/open-webui:0.12.3
+        - name: comfyui
+          image: mmartial/comfyui-nvidia-docker:ubuntu24_cuda13.4-20261018
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: source
+          url: https://github.com/klahio/charts/tree/main/ai-stack-lite
+        - name: GPU setup notes
+          url: https://github.com/klahio/charts/tree/main/ai-stack-lite#gpu-setup
+      artifacthub.io/prerelease: "true"
+    apiVersion: v2
+    appVersion: 0.2.0
+    created: "2026-10-21T17:21:00.18195575-04:00"
+    dependencies:
+    - name: common
+      repository: ""
+      version: 0.1.0
+    - condition: ollama.enabled
+      name: ollama
+      repository: ""
+      version: 0.2.0
+    - condition: open-webui.enabled
+      name: open-webui
+      repository: ""
+      version: 0.2.0
+    - condition: comfyui.enabled
+      name: comfyui
+      repository: ""
+      version: 0.2.0
+    description: Self-hosted AI stack for on-prem Kubernetes - Ollama for LLM inference,
+      Open WebUI as the chat frontend, ComfyUI for image generation.
+    digest: 17ec43fc056f66311f719101a430d810277c60e7eab612aeeac6d6be6c68ec07
+    home: https://github.com/klahio/charts/tree/main/ai-stack-lite
+    icon: https://raw.githubusercontent.com/klahio/charts/main/ai-stack-lite/icon.svg
+    keywords:
+    - ai
+    - llm
+    - ollama
+    - open-webui
+    - comfyui
+    - gpu
+    - on-prem
+    - self-hosted
+    kubeVersion: '>=1.24.0-0'
+    maintainers:
+    - name: klahio
+      url: https://github.com/klahio
+    name: ai-stack-lite
+    sources:
+    - https://github.com/klahio/charts/tree/main/ai-stack-lite
+    - https://github.com/ollama/ollama
+    - https://github.com/open-webui/open-webui
+    - https://github.com/comfyanonymous/ComfyUI
+    type: application
+    urls:
+    - https://charts.klah.io/ai-stack-lite-0.2.1.tgz
+    version: 0.2.1
+  - annotations:
+      artifacthub.io/category: ai-machine-learning
+      artifacthub.io/changes: |
+        - kind: added
+          description: A default install now arrives with a model - Ollama pulls llama3.2:3b and ComfyUI fetches an SD 1.5 checkpoint
+        - kind: added
+          description: Open WebUI is wired to the stack's ComfyUI, so image generation works without manual admin settings
+        - kind: fixed
+          description: ComfyUI no longer overruns the deployment progress deadline while it builds its virtualenv on a fresh volume
+      artifacthub.io/images: |
+        - name: ollama
+          image: ollama/ollama:0.40.6
+        - name: open-webui
+          image: ghcr.io/open-webui/open-webui:0.12.3
+        - name: comfyui
+          image: mmartial/comfyui-nvidia-docker:ubuntu24_cuda13.4-20261018
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: source
+          url: https://github.com/klahio/charts/tree/main/ai-stack-lite
+        - name: GPU setup notes
+          url: https://github.com/klahio/charts/tree/main/ai-stack-lite#gpu-setup
+      artifacthub.io/prerelease: "true"
+    apiVersion: v2
+    appVersion: 0.2.0
+    created: "2026-10-21T17:21:00.178394071-04:00"
+    dependencies:
+    - name: common
+      repository: ""
+      version: 0.1.0
+    - condition: ollama.enabled
+      name: ollama
+      repository: ""
+      version: 0.2.0
+    - condition: open-webui.enabled
+      name: open-webui
+      repository: ""
+      version: 0.2.0
+    - condition: comfyui.enabled
+      name: comfyui
+      repository: ""
+      version: 0.2.0
+    description: Self-hosted AI stack for on-prem Kubernetes - Ollama for LLM inference,
+      Open WebUI as the chat frontend, ComfyUI for image generation.
+    digest: f5814e154dbe5ab6afe0f8a47c0c8aa26dcccf75efd23cc91f44aa78a3fdf157
+    home: https://github.com/klahio/charts/tree/main/ai-stack-lite
+    icon: https://raw.githubusercontent.com/klahio/charts/main/ai-stack-lite/icon.svg
+    keywords:
+    - ai
+    - llm
+    - ollama
+    - open-webui
+    - comfyui
+    - gpu
+    - on-prem
+    - self-hosted
+    kubeVersion: '>=1.24.0-0'
+    maintainers:
+    - name: klahio
+      url: https://github.com/klahio
+    name: ai-stack-lite
+    sources:
+    - https://github.com/klahio/charts/tree/main/ai-stack-lite
+    - https://github.com/ollama/ollama
+    - https://github.com/open-webui/open-webui
+    - https://github.com/comfyanonymous/ComfyUI
+    type: application
+    urls:
+    - https://charts.klah.io/ai-stack-lite-0.2.0.tgz
+    version: 0.2.0
+  - annotations:
+      artifacthub.io/category: ai-machine-learning
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial release with Ollama, Open WebUI and ComfyUI subcharts
+        - kind: added
+          description: Install-time checks for GPU, RuntimeClass, StorageClass and ingress
+        - kind: added
+          description: Gateway API HTTPRoute as an alternative to Ingress
+      artifacthub.io/images: |
+        - name: ollama
+          image: ollama/ollama:0.40.6
+        - name: open-webui
+          image: ghcr.io/open-webui/open-webui:0.12.3
+        - name: comfyui
+          image: mmartial/comfyui-nvidia-docker:ubuntu24_cuda13.4-20261018
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: source
+          url: https://github.com/klahio/charts/tree/main/ai-stack-lite
+        - name: GPU setup notes
+          url: https://github.com/klahio/charts/tree/main/ai-stack-lite#gpu-setup
+      artifacthub.io/prerelease: "true"
+    apiVersion: v2
+    appVersion: 0.1.0
+    created: "2026-10-21T17:21:00.175309476-04:00"
+    dependencies:
+    - name: common
+      repository: ""
+      version: 0.1.0
+    - condition: ollama.enabled
+      name: ollama
+      repository: ""
+      version: 0.1.0
+    - condition: open-webui.enabled
+      name: open-webui
+      repository: ""
+      version: 0.1.0
+    - condition: comfyui.enabled
+      name: comfyui
+      repository: ""
+      version: 0.1.0
+    description: Self-hosted AI stack for on-prem Kubernetes - Ollama for LLM inference,
+      Open WebUI as the chat frontend, ComfyUI for image generation.
+    digest: 636faf0adf33fa36c6beb10f0c85d6e6547749081d7397fb7516642fa9289ac4
+    home: https://github.com/klahio/charts/tree/main/ai-stack-lite
+    icon: https://raw.githubusercontent.com/klahio/charts/main/ai-stack-lite/icon.svg
+    keywords:
+    - ai
+    - llm
+    - ollama
+    - open-webui
+    - comfyui
+    - gpu
+    - on-prem
+    - self-hosted
+    kubeVersion: '>=1.24.0-0'
+    maintainers:
+    - name: klahio
+      url: https://github.com/klahio
+    name: ai-stack-lite
+    sources:
+    - https://github.com/klahio/charts/tree/main/ai-stack-lite
+    - https://github.com/ollama/ollama
+    - https://github.com/open-webui/open-webui
+    - https://github.com/comfyanonymous/ComfyUI
+    type: application
+    urls:
+    - https://charts.klah.io/ai-stack-lite-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-10-21T17:21:00.171938269-04:00"
