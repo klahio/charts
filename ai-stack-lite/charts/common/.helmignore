@@ -1,0 +1,10 @@
+.DS_Store
+.git/
+.idea/
+.vscode/
+*.tmproj
+*.swp
+*.bak
+*.orig
+# *.tgz is deliberately not ignored: the shared library chart arrives as
+# charts/common-<version>.tgz and ignoring it breaks template resolution.

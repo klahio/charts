@@ -1,0 +1,99 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Publishes the packaged chart and a repository index to the gh-pages branch.
+# That branch, served by GitHub Pages, is the Helm repository URL that Artifact
+# Hub is pointed at.
+#
+# chart-releaser is not used here. It discovers charts by diffing subdirectories
+# of a charts directory between commits, and this repository is a single chart
+# at its root, so it reports "no chart changes detected" and does nothing.
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: read chart version
+        id: chart
+        run: |
+          version=$(helm show chart . | awk '/^version:/ {print $2}')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "chart version: $version"
+
+      # The subcharts depend on the local library chart through file://, so the
+      # dependencies have to be vendored before the chart can be packaged.
+      - name: build dependencies
+        run: |
+          for c in charts/common charts/ollama charts/open-webui charts/comfyui; do
+            [ -f "$c/Chart.yaml" ] || continue
+            if grep -q '^dependencies:' "$c/Chart.yaml"; then
+              helm dependency build "$c"
+            fi
+          done
+          helm dependency build .
+
+      - name: package
+        run: |
+          mkdir -p .deploy
+          helm package . -d .deploy
+          ls -la .deploy
+
+      - name: publish to gh-pages
+        env:
+          VERSION: ${{ steps.chart.outputs.version }}
+        run: |
+          set -e
+          # Attribute the publish commit to the repository owner rather than the
+          # Actions bot. The bot identity is the usual default, but it then
+          # appears in the contributor list for a branch that only ever holds
+          # generated artifacts.
+          git config user.name "klahisaac"
+          git config user.email "isaac@klah.io"
+
+          # Work in a separate worktree so the packaged file is not disturbed.
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages
+            git worktree add .pages origin/gh-pages
+            git -C .pages checkout -B gh-pages
+          else
+            git worktree add --detach .pages
+            git -C .pages checkout --orphan gh-pages
+            git -C .pages rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          # Republishing the same version would leave two entries for it in the
+          # index, so the existing artifact is replaced rather than appended to.
+          cp -f .deploy/ai-stack-lite-"${VERSION}".tgz .pages/
+
+          # Ownership metadata has to sit next to index.yaml for Artifact Hub.
+          cp -f artifacthub-repo.yml .pages/ 2>/dev/null || true
+
+          # Jekyll would otherwise skip files it considers special.
+          touch .pages/.nojekyll
+
+          helm repo index .pages --url "https://klahio.github.io/ai-stack-lite"
+
+          cd .pages
+          git add -A
+          if git diff --cached --quiet; then
+            echo "index unchanged; nothing to publish"
+            exit 0
+          fi
+          git commit -m "Publish ai-stack-lite ${VERSION}"
+          git push origin gh-pages

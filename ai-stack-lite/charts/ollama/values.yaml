@@ -1,0 +1,144 @@
+# Ollama serves LLM inference over an HTTP API. Open WebUI talks to it; nothing
+# else in the stack does.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  registry: ""
+  repository: ollama/ollama
+  # Pinned deliberately. A floating tag turns every pod restart into an
+  # unannounced upgrade of the inference engine.
+  tag: "0.40.6"
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Component-level GPU override. Left empty so the umbrella chart's global.gpu
+# controls the whole stack from one place. Set a key here only to make this
+# component differ from the rest.
+gpu: {}
+
+# Applies when this subchart is installed on its own. Under the umbrella chart
+# the parent's global block takes precedence over this.
+global:
+  gpu:
+    enabled: true
+    count: 1
+    # Required unless the nvidia runtime is the containerd default. See the GPU
+    # section of the top-level README.
+    runtimeClassName: nvidia
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi
+  limits:
+    memory: 16Gi
+
+service:
+  type: ClusterIP
+  port: 11434
+  annotations: {}
+
+# Off by default. Ollama's API has no authentication, so exposing it through an
+# Ingress publishes an open inference endpoint.
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  path: /
+  pathType: Prefix
+  annotations: {}
+  tls: []
+
+# Gateway API alternative to the Ingress above. Use this on a cluster that has a
+# Gateway rather than an ingress controller. Enable one or the other, not both.
+route:
+  enabled: false
+  # The Gateway to attach to. A route only attaches where its hostname
+  # intersects the listener's, so the hostnames below have to match what the
+  # Gateway's listener accepts.
+  parentRefs:
+    - name: ""
+      namespace: ""
+      sectionName: ""
+  hostnames: []
+  path: /
+  pathType: PathPrefix
+  annotations: {}
+  timeouts: {}
+  filters: []
+
+persistence:
+  models:
+    enabled: true
+    size: 100Gi
+    accessMode: ReadWriteOnce
+    storageClass: ""
+    existingClaim: ""
+    mountPath: /root/.ollama
+    # Survives helm uninstall. Weights are expensive to re-download.
+    resourcePolicy: keep
+
+env:
+  # Unload an idle model after five minutes. This is what lets Ollama and
+  # ComfyUI share one card without fighting over VRAM. Setting it to -1 pins the
+  # model in VRAM permanently, which makes the first token faster and makes
+  # concurrent image generation much more likely to fail.
+  OLLAMA_KEEP_ALIVE: "5m"
+  # One model resident at a time. Raising this on a 16 GB card is how you get an
+  # out-of-memory failure.
+  OLLAMA_MAX_LOADED_MODELS: "1"
+  OLLAMA_HOST: "0.0.0.0:11434"
+
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
+probes:
+  startup:
+    enabled: true
+    path: /
+    # Ollama answers quickly, but a cold start on a slow disk is not instant.
+    failureThreshold: 30
+    periodSeconds: 5
+  readiness:
+    enabled: true
+    path: /
+  liveness:
+    enabled: true
+    path: /
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automount: false
+
+podSecurityContext: {}
+securityContext: {}
+
+podAnnotations: {}
+podLabels: {}
+extraLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+
+terminationGracePeriodSeconds: 60
+
+# Pull models once, after install, as a Job. Leave empty to manage models by
+# hand with `ollama pull` inside the pod.
+modelPuller:
+  enabled: false
+  models: []
+  #  - llama3.2:3b
+  #  - qwen2.5-coder:7b
+  backoffLimit: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi

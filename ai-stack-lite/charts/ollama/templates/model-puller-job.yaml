@@ -1,0 +1,55 @@
+{{- if and .Values.modelPuller.enabled .Values.modelPuller.models }}
+{{/*
+Runs after the StatefulSet is up and pulls the listed models into the shared
+volume through the Ollama API, so no GPU and no second copy of the weights.
+
+post-install only, not post-upgrade: re-running on every upgrade would re-check
+every model against the registry and stall the release on a slow link.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "common.fullname" . }}-model-puller
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.modelPuller.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "common.selectorLabels" . | nindent 8 }}
+        ai-stack-lite/job: model-puller
+        {{- with .Values.podLabels }}{{- toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 8 }}{{- end }}{{- end }}
+    spec:
+      restartPolicy: OnFailure
+      {{- include "common.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "common.serviceAccountName" . }}
+      {{- include "common.scheduling" . | nindent 6 }}
+      containers:
+        - name: puller
+          image: {{ include "common.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: OLLAMA_HOST
+              value: {{ printf "http://%s:%d" (include "common.fullname" .) (.Values.service.port | int) }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "waiting for ollama at $OLLAMA_HOST"
+              until ollama list >/dev/null 2>&1; do sleep 3; done
+              {{- range .Values.modelPuller.models }}
+              echo "pulling {{ . }}"
+              ollama pull {{ . | quote }}
+              {{- end }}
+              echo "done"
+              ollama list
+          resources:
+            {{- toYaml .Values.modelPuller.resources | nindent 12 }}
+{{- end }}

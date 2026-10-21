@@ -1,0 +1,28 @@
+# No GPU anywhere. Ollama falls back to CPU inference, which is slow but works
+# for small models. ComfyUI is left out, because image generation on CPU is slow
+# enough to be useless rather than merely slow.
+
+global:
+  gpu:
+    enabled: false
+    count: 0
+    runtimeClassName: ""
+
+ollama:
+  enabled: true
+  resources:
+    requests:
+      cpu: "4"
+      memory: 8Gi
+    limits:
+      memory: 32Gi
+  env:
+    OLLAMA_KEEP_ALIVE: "30m"
+    OLLAMA_MAX_LOADED_MODELS: "1"
+    OLLAMA_HOST: "0.0.0.0:11434"
+
+open-webui:
+  enabled: true
+
+comfyui:
+  enabled: false

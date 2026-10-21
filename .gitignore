@@ -1,0 +1,5 @@
+# Vendored Helm dependencies and packaged artifacts
+**/charts/*/charts/
+*.tgz
+.cr-release/
+.deploy/

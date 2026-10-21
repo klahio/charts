@@ -1,0 +1,51 @@
+# ai-stack-lite
+#
+# Three components, each installable on its own:
+#   ollama      LLM inference engine, holds the model weights
+#   open-webui  chat frontend, the only one exposed outside the cluster
+#   comfyui     image generation workflows
+#
+# The chart assumes the cluster can already schedule GPUs. It does not install
+# the NVIDIA container toolkit, a device plugin or the GPU Operator, because
+# those are node-level infrastructure with a different lifecycle: a helm
+# uninstall of this stack must not take the cluster's GPU support with it.
+# See the GPU section of the README. An install-time preflight check verifies the
+# prerequisites and fails with instructions rather than leaving pods Pending.
+
+global:
+  # Applied to every component unless the component overrides it.
+  gpu:
+    enabled: true
+    count: 1
+    # Needed whenever the nvidia runtime is not containerd's default. Omitting it
+    # produces the worst failure mode available: the pod schedules, starts, and
+    # only then discovers it has no GPU libraries. Clear this to "" if nvidia is
+    # already your default runtime.
+    runtimeClassName: nvidia
+
+  preflight:
+    # Waives the install-time cluster checks. A check that is wrong must never be
+    # the reason you cannot install.
+    skip: false
+
+  # Pin the whole stack to GPU nodes in one place.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  # Labels added to every object and every pod. Useful where admission policy
+  # requires them, for example a mandatory team or cost-centre label.
+  extraLabels: {}
+  podLabels: {}
+
+  imageRegistry: ""
+  imagePullSecrets: []
+
+ollama:
+  enabled: true
+
+open-webui:
+  enabled: true
+
+comfyui:
+  enabled: true

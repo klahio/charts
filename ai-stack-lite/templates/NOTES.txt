@@ -1,0 +1,71 @@
+ai-stack-lite {{ .Chart.Version }} installed as {{ .Release.Name }} in {{ .Release.Namespace }}.
+
+Components:
+{{ if index .Values "ollama" "enabled" }}  ollama      enabled{{ else }}  ollama      disabled{{ end }}
+{{ if index .Values "open-webui" "enabled" }}  open-webui  enabled{{ else }}  open-webui  disabled{{ end }}
+{{ if index .Values "comfyui" "enabled" }}  comfyui     enabled{{ else }}  comfyui     disabled{{ end }}
+
+{{- if index .Values "open-webui" "enabled" }}
+
+Reach the chat frontend:
+{{- $ow := index .Values "open-webui" }}
+{{- if and $ow.ingress $ow.ingress.enabled }}
+
+  http{{ if $ow.ingress.tls }}s{{ end }}://{{ $ow.ingress.host }}
+
+  Point that name at your ingress controller first. On a single machine, adding
+  it to /etc/hosts is enough.
+{{- else if and $ow.route $ow.route.enabled }}
+{{- range $ow.route.hostnames }}
+
+  https://{{ . }}
+{{- end }}
+
+  Served through the Gateway named in open-webui.route.parentRefs. Check the
+  route attached as expected:
+
+    kubectl -n {{ $.Release.Namespace }} get httproute {{ $.Release.Name }}-open-webui -o yaml
+{{- else }}
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }}-open-webui 8080:8080
+
+  then open http://localhost:8080
+
+  To expose it instead, enable one of open-webui.ingress or open-webui.route.
+  Which one depends on whether your cluster runs an ingress controller or a
+  Gateway; the chart checks at install time and will tell you if you pick the
+  one it cannot serve.
+{{- end }}
+
+The first account you register becomes the administrator.
+{{- end }}
+
+{{- if index .Values "ollama" "enabled" }}
+
+No models are installed by default. Pull one:
+
+  kubectl -n {{ .Release.Namespace }} exec -it statefulset/{{ .Release.Name }}-ollama -- ollama pull llama3.2:3b
+
+Weights land on a PersistentVolumeClaim annotated helm.sh/resource-policy: keep,
+so they survive a helm uninstall. Delete the claim by hand when you actually
+want the space back.
+{{- end }}
+
+{{- if index .Values "comfyui" "enabled" }}
+
+ComfyUI has no Ingress and no authentication. Reach it over a port-forward:
+
+  kubectl -n {{ .Release.Namespace }} port-forward deploy/{{ .Release.Name }}-comfyui 8188:8188
+{{- end }}
+
+{{- $g := .Values.global.gpu }}
+{{- if $g.enabled }}
+
+Verify the GPU reached the containers:
+
+  kubectl -n {{ .Release.Namespace }} exec statefulset/{{ .Release.Name }}-ollama -- nvidia-smi -L
+{{- else }}
+
+GPU support is off, so inference runs on CPU. Expect single-digit tokens per
+second even on small models.
+{{- end }}

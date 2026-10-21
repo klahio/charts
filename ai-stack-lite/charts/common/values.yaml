@@ -1,0 +1,2 @@
+# Library chart. It has no values of its own; every value it reads belongs to
+# the component chart that includes its templates.

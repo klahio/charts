@@ -1,0 +1,59 @@
+{{- include "common.preflight" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "common.fullname" . }}
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  # Model weights live on one ReadWriteOnce volume, so a rolling update would
+  # deadlock waiting for a second pod to attach it.
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  serviceName: {{ include "common.fullname" . }}
+  selector:
+    matchLabels:
+      {{- include "common.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "common.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{- toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 8 }}{{- end }}{{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "common.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "common.serviceAccountName" . }}
+      {{- include "common.runtimeClassName" . | nindent 6 }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- include "common.scheduling" . | nindent 6 }}
+      containers:
+        - name: ollama
+          image: {{ include "common.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 11434
+              protocol: TCP
+          env:
+            {{- include "common.env" . | nindent 12 }}
+          {{- include "common.probes" (dict "probes" .Values.probes "port" "http") | nindent 10 }}
+          resources:
+            {{- include "common.resources" . | nindent 12 }}
+          volumeMounts:
+            {{- include "common.volumeMounts" . | nindent 12 }}
+      volumes:
+        {{- include "common.volumes" . | nindent 8 }}

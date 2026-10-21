@@ -1,0 +1,13 @@
+# Ownership metadata for Artifact Hub.
+#
+# This file must sit next to index.yaml in the published repository, which for
+# the GitHub Pages setup means the root of the gh-pages branch. Artifact Hub
+# reads it to confirm who owns the repository and to attribute the charts.
+#
+# repositoryID is issued by Artifact Hub when the repository is first added
+# there, so it stays empty until then. Without it the repository still works,
+# but it is listed as unverified.
+repositoryID: ""
+owners:
+  - name: klahio
+    email: "isaac@klah.io"

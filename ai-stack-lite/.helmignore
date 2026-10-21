@@ -1,0 +1,21 @@
+.DS_Store
+.git/
+.gitignore
+.idea/
+.vscode/
+*.tmproj
+*.swp
+*.bak
+*.orig
+ci/
+.github/
+artifacthub-repo.yml
+LICENSE.bak
+# Profiles are documentation and examples; they are applied with -f rather than
+# bundled into the packaged chart.
+values-cpu.yaml
+values-single-gpu.yaml
+#
+# Note: *.tgz is deliberately NOT ignored. Helm resolves vendored subchart
+# dependencies from charts/*.tgz, and ignoring that pattern makes every
+# dependency silently disappear at load time.

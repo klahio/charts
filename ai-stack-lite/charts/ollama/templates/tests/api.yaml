@@ -1,0 +1,79 @@
+{{/*
+helm test: the API answers, and the GPU actually reached the container when one
+was requested. The second half is the point. A GPU pod with no RuntimeClass
+starts cleanly and only fails once something asks for the device, so a test that
+checks nothing but HTTP would pass on a broken install.
+*/}}
+{{- $g := fromJson (include "common.gpu" .) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "common.fullname" . }}-test-api
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+    {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 4 }}{{- end }}{{- end }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  {{- include "common.imagePullSecrets" . | nindent 2 }}
+  {{- include "common.scheduling" . | nindent 2 }}
+  containers:
+    - name: test
+      image: {{ include "common.image" . }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      env:
+        - name: OLLAMA_HOST
+          value: {{ printf "http://%s:%d" (include "common.fullname" .) (.Values.service.port | int) }}
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          {{- include "common.testRetry" (dict "attempts" 40 "interval" 5) | nindent 10 }}
+          check_api() { ollama list >/dev/null 2>&1; }
+          retry "ollama api at $OLLAMA_HOST" check_api
+          ollama list
+          echo "api ok"
+{{- if $g.enabled }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "common.fullname" . }}-test-gpu
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+    {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 4 }}{{- end }}{{- end }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  {{- include "common.imagePullSecrets" . | nindent 2 }}
+  {{- include "common.runtimeClassName" . | nindent 2 }}
+  {{- include "common.scheduling" . | nindent 2 }}
+  containers:
+    - name: test
+      image: {{ include "common.image" . }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          if ! command -v nvidia-smi >/dev/null 2>&1; then
+            echo "FAIL: nvidia-smi is not in this container."
+            echo
+            echo "The GPU resource was allocated but no driver libraries were"
+            echo "injected. That is what happens when the pod has no"
+            echo "runtimeClassName and the nvidia runtime is not containerd's"
+            echo "default. Check global.gpu.runtimeClassName."
+            exit 1
+          fi
+          nvidia-smi -L
+          echo "gpu ok"
+      resources:
+        limits:
+          nvidia.com/gpu: {{ $g.count }}
+{{- end }}

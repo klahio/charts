@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "vramMode": {
+      "type": "string",
+      "enum": [
+        "default",
+        "lowvram",
+        "novram",
+        "highvram",
+        "gpu-only",
+        "cpu"
+      ],
+      "description": "ComfyUI VRAM strategy. 'default' passes no flag and is correct for a shared GPU; highvram and gpu-only pin weights in VRAM."
+    },
+    "gpu": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "runtimeClassName": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

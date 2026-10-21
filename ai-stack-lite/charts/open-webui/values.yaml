@@ -1,0 +1,163 @@
+# Open WebUI is the chat frontend. It is the only component meant to be reached
+# from outside the cluster, so it is the only one with Ingress on by default.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  registry: ""
+  repository: ghcr.io/open-webui/open-webui
+  tag: "0.12.3"
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# The frontend does no inference of its own, so this is set at the component
+# level and deliberately overrides global.gpu. Giving it a GPU would hold a
+# time-slice that Ollama or ComfyUI could otherwise use.
+gpu:
+  enabled: false
+  count: 0
+  runtimeClassName: ""
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    memory: 2Gi
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+# Exposure is off by default. Neither choice below can be a safe default: an
+# Ingress routes nothing on a cluster that has only a Gateway, and an HTTPRoute
+# needs the name of a Gateway this chart cannot guess. Pick the one your cluster
+# serves. Until then, reach the frontend with kubectl port-forward.
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  path: /
+  pathType: Prefix
+  annotations:
+    # Model responses stream over a long-lived connection. The default 60s proxy
+    # read timeout cuts long generations off mid-answer.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+  tls: []
+
+# Gateway API alternative to the Ingress above. Use this on a cluster that has a
+# Gateway rather than an ingress controller. Enable one or the other, not both.
+route:
+  enabled: false
+  # The Gateway to attach to. A route only attaches where its hostname
+  # intersects the listener's, so the hostnames below have to match what the
+  # Gateway's listener accepts.
+  parentRefs:
+    - name: ""
+      namespace: ""
+      sectionName: ""
+  hostnames: []
+  path: /
+  pathType: PathPrefix
+  annotations: {}
+  timeouts: {}
+  filters: []
+
+persistence:
+  data:
+    enabled: true
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    storageClass: ""
+    existingClaim: ""
+    mountPath: /app/backend/data
+    resourcePolicy: keep
+
+# Connection to Ollama. When the umbrella chart installs both, leave url empty
+# and the in-cluster service name is derived automatically.
+ollama:
+  enabled: true
+  url: ""
+
+auth:
+  # Signing key for session cookies. Left empty, the chart generates one on first
+  # install and keeps it across upgrades, so sessions survive a helm upgrade.
+  secretKey: ""
+  # Point at a Secret you manage yourself instead. Takes precedence over
+  # secretKey. The Secret must have a WEBUI_SECRET_KEY key.
+  existingSecret: ""
+  # Set false to drop the login screen. Only sane on a trusted network, because
+  # it gives every visitor full access including the admin panel.
+  enableSignup: true
+
+env:
+  # Telemetry and the model list fetched from huggingface both reach out to the
+  # internet. Off by default, because an on-prem deployment usually means the
+  # egress is either absent or audited.
+  ANONYMIZED_TELEMETRY: "false"
+  DO_NOT_TRACK: "true"
+  SCARF_NO_ANALYTICS: "true"
+  WEBUI_AUTH: "true"
+  # Makes "generate an image" work from the chat box.
+  #
+  # Open WebUI has two routes for image generation. The default route hands the
+  # model a generate_image tool and waits for it to call it. The legacy route
+  # sends the prompt straight to the image backend. The tool is not actually
+  # offered to Ollama models here, so on the default route the model answers
+  # that it cannot generate images and nothing ever reaches ComfyUI, with no
+  # error in any log. The legacy route does not depend on a tool call, so it
+  # works with any model.
+  #
+  # This only takes effect on a FIRST install. Open WebUI persists its settings
+  # in the database and an environment variable seeds that row rather than
+  # overriding it, so on an existing release the value here is ignored. Change
+  # it in Admin Settings under Models, or clear the stored value, and the
+  # setting is per deployment rather than per chat.
+  DEFAULT_MODEL_PARAMS: '{"function_calling":"legacy"}'
+
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
+probes:
+  startup:
+    enabled: true
+    path: /health
+    failureThreshold: 40
+    periodSeconds: 5
+  readiness:
+    enabled: true
+    path: /health
+  liveness:
+    enabled: true
+    path: /health
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automount: false
+
+podSecurityContext: {}
+securityContext: {}
+
+podAnnotations: {}
+podLabels: {}
+extraLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+
+terminationGracePeriodSeconds: 30
+
+strategy:
+  # Recreate, not RollingUpdate: the data volume is ReadWriteOnce, so a second
+  # pod cannot mount it while the first is still running.
+  type: Recreate

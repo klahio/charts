@@ -1,0 +1,4 @@
+charts/*/charts/
+charts/*.tgz
+*.tgz
+.cr-release/

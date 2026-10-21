@@ -1,0 +1,15 @@
+dependencies:
+- name: common
+  repository: ""
+  version: 0.1.0
+- name: ollama
+  repository: ""
+  version: 0.1.0
+- name: open-webui
+  repository: ""
+  version: 0.1.0
+- name: comfyui
+  repository: ""
+  version: 0.1.0
+digest: sha256:ccee4c1714aff90fdb7e5357dde08d965a89c7bda0f1ab9f166f0a14a4915adc
+generated: "2026-10-19T18:57:08.370611574-04:00"

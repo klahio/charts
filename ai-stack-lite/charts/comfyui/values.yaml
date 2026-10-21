@@ -1,0 +1,231 @@
+# ComfyUI runs image generation workflows. It needs the GPU and a lot of disk.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  registry: ""
+  # There is no official ComfyUI image. This one is actively maintained and
+  # built on CUDA 13, which matters: images pinned to CUDA 12.1 carry PyTorch
+  # kernels that do not cover Blackwell cards, so they fail on recent hardware
+  # with "no kernel image is available for execution on the device".
+  repository: mmartial/comfyui-nvidia-docker
+  tag: "ubuntu24_cuda13.4-20261018"
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# See the note in the Ollama subchart: GPU settings come from global.gpu so the
+# umbrella can switch the stack in one place.
+gpu: {}
+
+# Applies to a standalone install of this subchart only.
+global:
+  gpu:
+    enabled: true
+    count: 1
+    runtimeClassName: nvidia
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 4Gi
+  limits:
+    memory: 24Gi
+
+service:
+  type: ClusterIP
+  port: 8188
+  annotations: {}
+
+# Off by default. ComfyUI has no authentication of its own, and its workflow API
+# can read and write files inside the container.
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  path: /
+  pathType: Prefix
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+  tls: []
+
+# Gateway API alternative to the Ingress above. Use this on a cluster that has a
+# Gateway rather than an ingress controller. Enable one or the other, not both.
+route:
+  enabled: false
+  # The Gateway to attach to. A route only attaches where its hostname
+  # intersects the listener's, so the hostnames below have to match what the
+  # Gateway's listener accepts.
+  parentRefs:
+    - name: ""
+      namespace: ""
+      sectionName: ""
+  hostnames: []
+  path: /
+  pathType: PathPrefix
+  annotations: {}
+  timeouts: {}
+  filters: []
+
+# Four claims rather than one. The split is deliberate: the virtualenv is large
+# and is the thing to delete when an install goes wrong, checkpoints are large
+# and rarely change, outputs grow without bound, and configuration is small and
+# worth backing up. Separate claims let each be sized, backed up and reset
+# without touching the others.
+persistence:
+  # The image's run directory. It clones ComfyUI here and builds a virtualenv
+  # with PyTorch inside it, which is most of the space. The image requires this
+  # path to exist and be writable, and fails at startup if it does not, so this
+  # entry is not optional.
+  run:
+    enabled: true
+    size: 30Gi
+    accessMode: ReadWriteOnce
+    storageClass: ""
+    existingClaim: ""
+    mountPath: /comfy/mnt
+    resourcePolicy: keep
+  # Everything ComfyUI treats as data: configuration, the user directory, and
+  # the two subtrees mounted below. Giving this its own claim is what makes the
+  # path exist, which the base directory check requires.
+  basedir:
+    enabled: true
+    size: 5Gi
+    accessMode: ReadWriteOnce
+    storageClass: ""
+    existingClaim: ""
+    mountPath: /basedir
+    resourcePolicy: keep
+  models:
+    enabled: true
+    size: 200Gi
+    accessMode: ReadWriteOnce
+    storageClass: ""
+    existingClaim: ""
+    mountPath: /basedir/models
+    resourcePolicy: keep
+  output:
+    enabled: true
+    size: 50Gi
+    accessMode: ReadWriteOnce
+    storageClass: ""
+    existingClaim: ""
+    mountPath: /basedir/output
+    resourcePolicy: keep
+
+# VRAM strategy, passed to ComfyUI as a command line flag.
+#
+# "default" passes no flag at all, which is what you want in almost every case:
+# ComfyUI's dynamic VRAM manager is on by default and unloads models to system
+# RAM after use. That behaviour is what makes sharing one card with Ollama work.
+#
+# The older --normalvram flag no longer exists; it was removed once its
+# behaviour became the default. Passing it to a current ComfyUI is a hard
+# startup failure, not a warning.
+#
+# Other values: lowvram, novram, highvram, gpu-only, cpu. highvram and gpu-only
+# pin weights in VRAM and will starve anything else on the same GPU.
+vramMode: default
+
+# GB of VRAM to leave free for other software, passed as --reserve-vram.
+#
+# This is the knob for a shared card. Reserving a couple of gigabytes keeps
+# ComfyUI from expanding into the memory Ollama needs for the model it is about
+# to load. Empty leaves ComfyUI's own platform-dependent default in place.
+reserveVram: ""
+
+# Extra ComfyUI command line flags, appended after the flags above.
+extraArgs: []
+
+# File ownership for the mounted volumes. The image's init script insists on
+# owning its directories as this uid and gid, and refuses to start otherwise.
+podUser:
+  uid: 1024
+  gid: 1024
+
+# A freshly provisioned volume is owned by root, and fsGroup changes only the
+# group, never the owner. Without this the container exits on first start
+# complaining about the directory owner. Leave it on unless your storage
+# provisioner already hands over volumes with the right owner.
+fixVolumeOwnership:
+  enabled: true
+  image: busybox:1.37
+
+# ComfyUI-Manager permission level, as the image defines it. "normal" blocks
+# installing custom nodes from arbitrary git URLs through the web UI.
+securityLevel: normal
+
+# The image installs and updates ComfyUI and its python dependencies into the
+# run volume on every start.
+#
+# This must stay false for the first boot, because that run is what builds the
+# environment. Setting it true on an empty volume gets you a half-installed
+# ComfyUI that fails on an import, which reads like a broken image rather than a
+# configuration mistake.
+#
+# Once the volume is populated, setting this to true is worth doing: it pins the
+# ComfyUI version, makes pod restarts deterministic, and removes the need for
+# egress at startup.
+disableUpgrades: false
+
+env: {}
+
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
+# Override the image entrypoint. Empty uses the image default, which for this
+# image is an init script that reads the environment variables above. Set these
+# only when pointing the chart at a different ComfyUI image that expects plain
+# command line arguments.
+command: []
+args: []
+
+probes:
+  startup:
+    enabled: true
+    path: /
+    # First boot clones ComfyUI, builds a virtualenv and installs PyTorch into
+    # the mounted volume. On a cold volume that takes many minutes, so the
+    # window here is deliberately wide.
+    failureThreshold: 180
+    periodSeconds: 10
+  readiness:
+    enabled: true
+    path: /
+  liveness:
+    enabled: true
+    path: /
+    # A long generation blocks the event loop. A tight liveness probe here
+    # restarts the pod in the middle of a user's render.
+    periodSeconds: 60
+    failureThreshold: 10
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automount: false
+
+podSecurityContext:
+  # Makes the mounted volumes group writable for the uid the init script uses.
+  fsGroup: 1024
+  fsGroupChangePolicy: OnRootMismatch
+
+securityContext: {}
+
+podAnnotations: {}
+podLabels: {}
+extraLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+
+terminationGracePeriodSeconds: 60
+
+strategy:
+  type: Recreate

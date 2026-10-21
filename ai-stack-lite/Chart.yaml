@@ -1,0 +1,60 @@
+apiVersion: v2
+name: ai-stack-lite
+description: Self-hosted AI stack for on-prem Kubernetes - Ollama for LLM inference, Open WebUI as the chat frontend, ComfyUI for image generation.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.24.0-0"
+keywords: [ai, llm, ollama, open-webui, comfyui, gpu, on-prem, self-hosted]
+home: https://github.com/klahio/ai-stack-lite
+icon: https://raw.githubusercontent.com/klahio/ai-stack-lite/main/icon.svg
+sources:
+  - https://github.com/klahio/ai-stack-lite
+  - https://github.com/ollama/ollama
+  - https://github.com/open-webui/open-webui
+  - https://github.com/comfyanonymous/ComfyUI
+maintainers:
+  - name: klahio
+    url: https://github.com/klahio
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/prerelease: "true"
+  artifacthub.io/category: ai-machine-learning
+  artifacthub.io/links: |
+    - name: source
+      url: https://github.com/klahio/ai-stack-lite
+    - name: GPU setup notes
+      url: https://github.com/klahio/ai-stack-lite#gpu-setup
+  artifacthub.io/images: |
+    - name: ollama
+      image: ollama/ollama:0.40.6
+    - name: open-webui
+      image: ghcr.io/open-webui/open-webui:0.12.3
+    - name: comfyui
+      image: mmartial/comfyui-nvidia-docker:ubuntu24_cuda13.4-20261018
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release with Ollama, Open WebUI and ComfyUI subcharts
+    - kind: added
+      description: Install-time checks for GPU, RuntimeClass, StorageClass and ingress
+    - kind: added
+      description: Gateway API HTTPRoute as an alternative to Ingress
+dependencies:
+  # Library chart. Renders nothing on its own; it carries the template helpers
+  # the three component charts share. Declared here as well as in each subchart
+  # so helm lint sees every directory under charts/ accounted for.
+  - name: common
+    version: 0.1.0
+    repository: ""
+  - name: ollama
+    version: 0.1.0
+    repository: ""
+    condition: ollama.enabled
+  - name: open-webui
+    version: 0.1.0
+    repository: ""
+    condition: open-webui.enabled
+  - name: comfyui
+    version: 0.1.0
+    repository: ""
+    condition: comfyui.enabled

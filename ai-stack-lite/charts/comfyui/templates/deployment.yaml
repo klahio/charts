@@ -1,0 +1,87 @@
+{{- include "common.preflight" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "common.fullname" . }}
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: {{ .Values.strategy.type }}
+  selector:
+    matchLabels:
+      {{- include "common.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "common.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{- toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 8 }}{{- end }}{{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "common.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "common.serviceAccountName" . }}
+      {{- include "common.runtimeClassName" . | nindent 6 }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- include "common.scheduling" . | nindent 6 }}
+      {{- if .Values.fixVolumeOwnership.enabled }}
+      initContainers:
+        {{- include "common.chownInit" (dict "ctx" . "uid" .Values.podUser.uid "gid" .Values.podUser.gid "image" .Values.fixVolumeOwnership.image) | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: comfyui
+          image: {{ include "common.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8188
+              protocol: TCP
+          env:
+            - name: LISTEN_ADDRESS
+              value: "0.0.0.0"
+            - name: LISTEN_PORT
+              value: "8188"
+            {{- with include "comfyui.baseDirectory" . }}
+            - name: BASE_DIRECTORY
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with include "comfyui.cmdlineExtra" . }}
+            - name: COMFY_CMDLINE_EXTRA
+              value: {{ . | quote }}
+            {{- end }}
+            - name: WANTED_UID
+              value: {{ .Values.podUser.uid | quote }}
+            - name: WANTED_GID
+              value: {{ .Values.podUser.gid | quote }}
+            - name: SECURITY_LEVEL
+              value: {{ .Values.securityLevel | quote }}
+            - name: DISABLE_UPGRADES
+              value: {{ .Values.disableUpgrades | quote }}
+            {{- include "common.env" . | nindent 12 }}
+          {{- include "common.probes" (dict "probes" .Values.probes "port" "http") | nindent 10 }}
+          resources:
+            {{- include "common.resources" . | nindent 12 }}
+          volumeMounts:
+            {{- include "common.volumeMounts" . | nindent 12 }}
+      volumes:
+        {{- include "common.volumes" . | nindent 8 }}

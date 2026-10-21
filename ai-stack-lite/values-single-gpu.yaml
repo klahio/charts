@@ -1,0 +1,77 @@
+# One consumer GPU shared by Ollama and ComfyUI, which is the common on-prem
+# case. Tested on a 16 GB RTX 5070 Ti.
+#
+# Both components request nvidia.com/gpu: 1, so the device plugin must advertise
+# at least two. On a single physical card that means time-slicing. The device
+# plugin is outside this chart; configure it with:
+#
+#   config:
+#     map:
+#       default: |-
+#         version: v1
+#         sharing:
+#           timeSlicing:
+#             resources:
+#             - name: nvidia.com/gpu
+#               replicas: 4
+#
+# Time-slicing shares execution time, not memory. Nothing stops the two from
+# together asking for more VRAM than the card has, so the settings below keep
+# each one willing to give its memory back when idle.
+
+global:
+  gpu:
+    enabled: true
+    count: 1
+    runtimeClassName: nvidia
+
+ollama:
+  enabled: true
+  env:
+    # Release VRAM five minutes after the last request. This single setting is
+    # what makes sharing work. Set it to -1 and the model never leaves the card,
+    # at which point image generation starts failing.
+    OLLAMA_KEEP_ALIVE: "5m"
+    OLLAMA_MAX_LOADED_MODELS: "1"
+    OLLAMA_HOST: "0.0.0.0:11434"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      memory: 12Gi
+
+comfyui:
+  enabled: true
+  # "default" is correct here: it unloads models between runs.
+  vramMode: default
+  # Leave 2 GB free so Ollama can load a model while ComfyUI is resident.
+  reserveVram: 2
+  resources:
+    requests:
+      cpu: 500m
+      memory: 4Gi
+    limits:
+      memory: 16Gi
+
+open-webui:
+  enabled: true
+  # Expose the frontend whichever way your cluster serves. On a cluster with an
+  # ingress controller:
+  #
+  #   ingress:
+  #     enabled: true
+  #     className: nginx
+  #     host: ai.example.internal
+  #
+  # On a cluster with a Gateway and no ingress controller, attach to a listener
+  # whose hostname covers the name you pick:
+  #
+  #   route:
+  #     enabled: true
+  #     parentRefs:
+  #       - name: my-gateway
+  #         namespace: gateway
+  #         sectionName: https
+  #     hostnames:
+  #       - ai.example.internal

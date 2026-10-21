@@ -1,0 +1,50 @@
+{{/*
+helm test: ComfyUI serves its UI, and the GPU reached the container. The GPU
+check matters more here than anywhere else in the stack, because image
+generation is the one workload that cannot fall back to the CPU at a usable
+speed.
+*/}}
+{{- $g := fromJson (include "common.gpu" .) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "common.fullname" . }}-test-http
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+    {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 4 }}{{- end }}{{- end }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  {{- include "common.imagePullSecrets" . | nindent 2 }}
+  {{- include "common.scheduling" . | nindent 2 }}
+  containers:
+    - name: test
+      image: curlimages/curl:8.11.1
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          {{- include "common.testRetry" (dict "attempts" 60 "interval" 10) | nindent 10 }}
+          check_http() {
+            curl -sf --max-time 15 "http://{{ include "common.fullname" . }}:{{ .Values.service.port }}/" >/dev/null
+          }
+          retry "comfyui http at port {{ .Values.service.port }}" check_http
+          echo "comfyui ok"
+          {{- if $g.enabled }}
+          echo "checking that comfyui reports a device"
+          curl -sf --max-time 15 "http://{{ include "common.fullname" . }}:{{ .Values.service.port }}/system_stats" \
+            | grep -qi "cuda" || {
+              echo "FAIL: comfyui reports no CUDA device."
+              echo "The GPU resource was allocated but the driver libraries did"
+              echo "not reach the container. Check global.gpu.runtimeClassName."
+              exit 1
+            }
+          echo "gpu ok"
+          {{- end }}
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi

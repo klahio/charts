@@ -1,0 +1,45 @@
+{{/*
+helm test: the frontend serves its health endpoint, and when Ollama is part of
+the release the frontend can actually reach it at the URL it was configured
+with. The second check catches a wrong OLLAMA_BASE_URL, which otherwise shows up
+only as an empty model list in the browser with nothing in any log.
+*/}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "common.fullname" . }}-test-connection
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+    {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 4 }}{{- end }}{{- end }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  {{- include "common.imagePullSecrets" . | nindent 2 }}
+  {{- include "common.scheduling" . | nindent 2 }}
+  containers:
+    - name: test
+      image: curlimages/curl:8.11.1
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          {{- include "common.testRetry" (dict "attempts" 40 "interval" 5) | nindent 10 }}
+          check_frontend() {
+            curl -sf --max-time 10 "http://{{ include "common.fullname" . }}:{{ .Values.service.port }}/health" >/dev/null
+          }
+          retry "open-webui health endpoint" check_frontend
+          echo "frontend ok"
+          {{- if .Values.ollama.enabled }}
+          check_ollama() {
+            curl -sf --max-time 10 "{{ include "open-webui.ollamaUrl" . }}/api/tags" >/dev/null
+          }
+          retry "ollama at {{ include "open-webui.ollamaUrl" . }}" check_ollama
+          echo "ollama reachable at {{ include "open-webui.ollamaUrl" . }}"
+          {{- end }}
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
