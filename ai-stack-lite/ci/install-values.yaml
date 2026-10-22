@@ -3,8 +3,9 @@
 # itself asks for more than that, so the requests are cut down here rather than
 # in the profile, which describes a machine someone would actually run it on.
 #
-# ComfyUI stays off, as in the profile. Its image carries CUDA and is too large
-# for a runner's disk alongside the other two.
+# ComfyUI is switched back on, but with ci/comfyui-cpu in place of the default
+# image, whose CUDA and first-boot virtualenv do not fit a runner's disk beside
+# the other two. install-check.sh builds that image and loads it into kind.
 
 ollama:
   resources:
@@ -30,3 +31,37 @@ open-webui:
   persistence:
     data:
       size: 1Gi
+  # Back on, since ComfyUI is installed here.
+  imageGeneration:
+    enabled: true
+
+comfyui:
+  enabled: true
+  image:
+    repository: ai-stack-lite-ci/comfyui-cpu
+    tag: ci
+    # Loaded into the kind nodes, never pulled.
+    pullPolicy: Never
+  resources:
+    requests:
+      cpu: 200m
+      memory: 1Gi
+    limits:
+      memory: 4Gi
+  persistence:
+    run:
+      size: 1Gi
+    basedir:
+      size: 1Gi
+    models:
+      size: 1Gi
+    output:
+      size: 1Gi
+  # A 5 MB file in place of the 4 GB checkpoint. Still a real download, into a
+  # directory ComfyUI indexes, so install-check.sh can ask ComfyUI whether it
+  # sees the file where the downloader put it.
+  modelDownloader:
+    models:
+      - dir: vae_approx
+        name: taesd_decoder.safetensors
+        url: https://huggingface.co/madebyollin/taesd/resolve/main/taesd_decoder.safetensors

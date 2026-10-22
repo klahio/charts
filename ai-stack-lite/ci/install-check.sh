@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Installs the CPU profile into the current kubectl context and runs the helm
-# tests against it. render-check.sh proves the templates render; this proves the
-# result starts, pulls a model through the post-install Job, and that the
-# frontend can reach Ollama at the URL it was given. Meant for a throwaway
-# cluster such as kind: it installs into its own namespace and removes it after.
+# Installs the CPU profile, with ComfyUI switched on and running a CPU-only image
+# built from ci/comfyui-cpu, and runs the helm tests against it. render-check.sh
+# proves the templates render; this proves the result starts, pulls a model
+# through the post-install Job, that the frontend can reach Ollama at the URL it
+# was given, and that ComfyUI starts with the flags and directories the chart
+# set. Needs docker and kind, and a kind cluster named $KIND_CLUSTER_NAME
+# (charts-ci by default) as the current context: it installs into its own
+# namespace and removes it after.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -27,6 +30,11 @@ dump() {
 
 trap 'status=$?; [[ $status -ne 0 ]] && dump; cleanup; exit $status' EXIT
 
+echo "==> build the CPU-only ComfyUI image and load it into kind"
+comfy_image=ai-stack-lite-ci/comfyui-cpu:ci
+docker build -q -t "$comfy_image" ci/comfyui-cpu
+kind load docker-image "$comfy_image" --name "${KIND_CLUSTER_NAME:-charts-ci}"
+
 echo "==> helm install (values-cpu.yaml + ci/install-values.yaml)"
 helm install "$release" . \
   -n "$namespace" --create-namespace \
@@ -42,6 +50,25 @@ kubectl -n "$namespace" exec "statefulset/$release-ollama" -- ollama list \
     echo "FAIL: smollm2:135m is not in ollama list after install" >&2
     exit 1
   }
+
+# Asked of ComfyUI itself rather than of the volume: a file on disk under a
+# directory ComfyUI does not read is exactly the failure worth catching.
+comfy_get() {
+  kubectl -n "$namespace" exec "deploy/$release-comfyui" -- \
+    python -c "import sys, urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8188' + sys.argv[1]).read().decode())" "$1"
+}
+
+echo "==> comfyui sees the downloaded file under BASE_DIRECTORY"
+comfy_get /models/vae_approx | grep -q '"taesd_decoder.safetensors"' || {
+  echo "FAIL: comfyui does not list vae_approx/taesd_decoder.safetensors" >&2
+  exit 1
+}
+
+echo "==> comfyui got --cpu from the chart"
+comfy_get /system_stats | grep -qE '"type"[[:space:]]*:[[:space:]]*"cpu"' || {
+  echo "FAIL: comfyui does not report a cpu device" >&2
+  exit 1
+}
 
 echo "==> helm upgrade (no changes) settles again"
 helm upgrade "$release" . \
