@@ -5,6 +5,140 @@ entries:
       artifacthub.io/category: ai-machine-learning
       artifacthub.io/changes: |
         - kind: fixed
+          description: An extraLabels entry for one of the chart's own label keys no longer emits a duplicate YAML key that silently rewrote an object's identity, or a pod label that no longer matched the workload's immutable selector
+        - kind: fixed
+          description: Label values are quoted, so a numeric team or cost-centre label no longer fails object creation with "must be a string"
+        - kind: added
+          description: An install-time check for claims a previous uninstall kept, which otherwise failed the reinstall partway through with an ownership error naming a PVC
+        - kind: added
+          description: An install-time check that ingress.className left empty has a default IngressClass to fall back on, matching the StorageClass check
+        - kind: added
+          description: An install-time check that ComfyUI's model path and BASE_DIRECTORY agree, and that the two Deployments are not set to RollingUpdate against ReadWriteOnce claims
+        - kind: fixed
+          description: The GPU check counts devices only on nodes that are Ready and schedulable, and says so when the only GPU nodes are cordoned
+        - kind: fixed
+          description: The model puller's wait is sized to report its reason inside helm's default timeout rather than after it
+        - kind: fixed
+          description: NOTES applies the full fullname rule, so a release whose name contains a component name no longer prints doubled object names, and its GPU and model paragraphs follow which components are actually installed
+        - kind: fixed
+          description: NOTES prints ComfyUI's address when an ingress or route is enabled for it, instead of stating that it has none
+        - kind: fixed
+          description: The ComfyUI GPU test matches the reported device rather than any occurrence of "cuda" in the response
+        - kind: fixed
+          description: Each Service now selects only the pod that serves it, instead of also matching the model-puller Job and the helm test pods, which carried the same two labels
+        - kind: fixed
+          description: The install-time StorageClass check no longer skips itself on a cluster with no StorageClass at all, which was the install certain to leave every PVC Pending
+        - kind: fixed
+          description: The install-time Gateway check no longer skips itself on a cluster with no Gateway, and an empty route.parentRefs[].name is reported as such rather than as a Gateway named ""
+        - kind: fixed
+          description: ComfyUI gets --cpu when GPU support is off, instead of crashlooping on a missing CUDA device
+        - kind: fixed
+          description: The model-puller Job waits a bounded time for the Ollama API and says why it gave up, rather than hanging the install until helm times out
+        - kind: fixed
+          description: The ComfyUI model downloader fixes ownership of every directory level it creates, so a nested model dir no longer leaves an intermediate directory owned by root
+        - kind: fixed
+          description: NOTES resolves object names and ports from values, so its commands stay correct under a name override or a moved service port, and no longer claims to fetch weights when the downloader is off
+        - kind: fixed
+          description: Emptying ollama.env no longer renders a bare env key
+        - kind: added
+          description: ollama.modelPuller.waitAttempts, bounding how long the puller waits for the API
+        - kind: fixed
+          description: global.extraLabels now reaches pods as well as the objects that own them, which is what the values file promised and what a mandatory-label admission policy checks
+        - kind: fixed
+          description: An Open WebUI auth.existingSecret no longer produces a new restart checksum on every render, which restarted the frontend on every upgrade
+        - kind: fixed
+          description: global.gpu.count of 0 now means no GPU everywhere, instead of leaving a runtimeClassName and GPU helm tests on a stack with no GPU
+        - kind: fixed
+          description: The install-time HTTPRoute check now treats hostname intersection as symmetric, so a wildcard route against a concrete listener is no longer rejected
+        - kind: fixed
+          description: The ComfyUI model downloader honours persistence.models.subPath, so a subPath install no longer downloads checkpoints outside the tree ComfyUI reads
+        - kind: fixed
+          description: The busybox and curl helper images go through global.imageRegistry, so a mirrored cluster can pull them
+        - kind: changed
+          description: The helm test image is a value rather than hardcoded, and both test pods share one pin
+        - kind: added
+          description: open-webui.clusterDomain, for clusters not built on cluster.local
+        - kind: fixed
+          description: Documentation corrections - the model pull blocks the install rather than running after it, exposure is off by default rather than on, auth.enableSignup controls registration and not the login screen, and the README no longer claims ComfyUI runs with a flag the chart does not pass
+        - kind: fixed
+          description: Open WebUI no longer restarts once on the first upgrade after an install, from a session key hashed before it was settled
+        - kind: fixed
+          description: NOTES now reflect the models the chart installs rather than telling you there are none
+        - kind: added
+          description: A default install now arrives with a model - Ollama pulls llama3.2:3b and ComfyUI fetches an SD 1.5 checkpoint
+        - kind: added
+          description: Open WebUI is wired to the stack's ComfyUI, so image generation works without manual admin settings
+        - kind: fixed
+          description: ComfyUI no longer overruns the deployment progress deadline while it builds its virtualenv on a fresh volume
+      artifacthub.io/images: |
+        - name: ollama
+          image: ollama/ollama:0.40.6
+        - name: open-webui
+          image: ghcr.io/open-webui/open-webui:0.12.3
+        - name: comfyui
+          image: mmartial/comfyui-nvidia-docker:ubuntu24_cuda13.4-20261018
+        - name: busybox (volume ownership init container)
+          image: busybox:1.37
+        - name: curl (model downloader and helm tests)
+          image: curlimages/curl:8.17.0
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: source
+          url: https://github.com/klahio/charts/tree/main/ai-stack-lite
+        - name: GPU setup notes
+          url: https://github.com/klahio/charts/tree/main/ai-stack-lite#gpu-setup
+      artifacthub.io/prerelease: "true"
+    apiVersion: v2
+    appVersion: 0.2.0
+    created: "2026-10-22T02:59:21.536599838Z"
+    dependencies:
+    - name: common
+      repository: ""
+      version: 0.2.0
+    - condition: ollama.enabled
+      name: ollama
+      repository: ""
+      version: 0.3.0
+    - condition: open-webui.enabled
+      name: open-webui
+      repository: ""
+      version: 0.3.0
+    - condition: comfyui.enabled
+      name: comfyui
+      repository: ""
+      version: 0.3.0
+    description: Self-hosted AI stack for on-prem Kubernetes - Ollama for LLM inference,
+      Open WebUI as the chat frontend, ComfyUI for image generation.
+    digest: 0d950ed410820055a465e4f95cb641b9b31db2f8703f183238a4cefb7a72b2e3
+    home: https://github.com/klahio/charts/tree/main/ai-stack-lite
+    icon: https://raw.githubusercontent.com/klahio/charts/main/ai-stack-lite/icon.svg
+    keywords:
+    - ai
+    - llm
+    - ollama
+    - open-webui
+    - comfyui
+    - gpu
+    - on-prem
+    - self-hosted
+    kubeVersion: '>=1.24.0-0'
+    maintainers:
+    - name: klahio
+      url: https://github.com/klahio
+    name: ai-stack-lite
+    sources:
+    - https://github.com/klahio/charts/tree/main/ai-stack-lite
+    - https://github.com/ollama/ollama
+    - https://github.com/open-webui/open-webui
+    - https://github.com/comfyanonymous/ComfyUI
+    type: application
+    urls:
+    - https://charts.klah.io/ai-stack-lite-0.3.0.tgz
+    version: 0.3.0
+  - annotations:
+      artifacthub.io/category: ai-machine-learning
+      artifacthub.io/changes: |
+        - kind: fixed
           description: Open WebUI no longer restarts once on the first upgrade after an install, from a session key hashed before it was settled
         - kind: fixed
           description: NOTES now reflect the models the chart installs rather than telling you there are none
@@ -30,7 +164,7 @@ entries:
       artifacthub.io/prerelease: "true"
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-21T17:21:00.186288405-04:00"
+    created: "2026-10-22T02:59:21.534008969Z"
     dependencies:
     - name: common
       repository: ""
@@ -102,7 +236,7 @@ entries:
       artifacthub.io/prerelease: "true"
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-21T17:21:00.18195575-04:00"
+    created: "2026-10-22T02:59:21.531963607Z"
     dependencies:
     - name: common
       repository: ""
@@ -172,7 +306,7 @@ entries:
       artifacthub.io/prerelease: "true"
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-21T17:21:00.178394071-04:00"
+    created: "2026-10-22T02:59:21.530066829Z"
     dependencies:
     - name: common
       repository: ""
@@ -242,7 +376,7 @@ entries:
       artifacthub.io/prerelease: "true"
     apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-10-21T17:21:00.175309476-04:00"
+    created: "2026-10-22T02:59:21.527668746Z"
     dependencies:
     - name: common
       repository: ""
@@ -287,4 +421,4 @@ entries:
     urls:
     - https://charts.klah.io/ai-stack-lite-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-21T17:21:00.171938269-04:00"
+generated: "2026-10-22T02:59:21.52563416Z"
