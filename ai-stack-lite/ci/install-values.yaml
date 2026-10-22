@@ -1,0 +1,32 @@
+# Layered on values-cpu.yaml by ci/install-check.sh, to install the stack into a
+# kind cluster on a GitHub runner: 4 vCPUs, 16 GB of memory, no GPU. The profile
+# itself asks for more than that, so the requests are cut down here rather than
+# in the profile, which describes a machine someone would actually run it on.
+#
+# ComfyUI stays off, as in the profile. Its image carries CUDA and is too large
+# for a runner's disk alongside the other two.
+
+ollama:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 4Gi
+  persistence:
+    models:
+      size: 2Gi
+  # Still exercises the post-install Job end to end, with a model small enough
+  # to pull in seconds.
+  modelPuller:
+    models:
+      - smollm2:135m
+
+open-webui:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+  persistence:
+    data:
+      size: 1Gi

@@ -40,3 +40,36 @@ jobs:
             echo "no charts found at the repository root" >&2
             exit 1
           fi
+
+  # The render job never meets a cluster, so the preflight lookups, the
+  # post-install model puller and the helm tests never run there. This job gives
+  # them one: a kind cluster, against which each chart's render-check.sh runs in
+  # --server mode, and its install-check.sh, if it has one, installs a profile
+  # and runs helm test.
+  install:
+    runs-on: ubuntu-latest
+    needs: render
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: charts-ci
+
+      - name: install and test every chart
+        run: |
+          shopt -s nullglob
+          for manifest in */Chart.yaml; do
+            dir=${manifest%/Chart.yaml}
+            echo "==> $dir"
+            if [ -x "$dir/ci/render-check.sh" ]; then
+              "$dir/ci/render-check.sh" --server
+            fi
+            if [ -x "$dir/ci/install-check.sh" ]; then
+              "$dir/ci/install-check.sh"
+            fi
+          done
