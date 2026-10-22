@@ -7,11 +7,23 @@ metadata:
     {{- include "common.labels" . | nindent 4 }}
 spec:
   replicas: 1
-  # Model weights live on one ReadWriteOnce volume, so a rolling update would
-  # deadlock waiting for a second pod to attach it.
+  # A StatefulSet rather than a Deployment because of the volume. Model weights
+  # live on one ReadWriteOnce claim, and a StatefulSet's RollingUpdate deletes
+  # the existing pod before creating its replacement, so the claim is only ever
+  # attached to one pod. A Deployment's default RollingUpdate would start the
+  # new pod first and wait forever for a volume the old one still holds, which
+  # is why that default is not used anywhere in this chart: the other two
+  # components set Recreate for the same reason.
   podManagementPolicy: OrderedReady
   updateStrategy:
     type: RollingUpdate
+  {{- /* This names the ClusterIP Service rather than a headless one, so the
+         per-pod DNS records a StatefulSet would normally publish do not exist.
+         Nothing here uses them: there is one replica and every client talks to
+         the Service. It stays as it is because serviceName is immutable once
+         the StatefulSet exists, so pointing it at a new headless Service would
+         make every upgrade of an existing release fail with a forbidden-update
+         error until the StatefulSet was deleted by hand. */}}
   serviceName: {{ include "common.fullname" . }}
   selector:
     matchLabels:
@@ -19,9 +31,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "common.selectorLabels" . | nindent 8 }}
-        {{- with .Values.podLabels }}{{- toYaml . | nindent 8 }}{{- end }}
-        {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 8 }}{{- end }}{{- end }}
+        {{- include "common.servingPodLabels" . | nindent 8 }}
       {{- with .Values.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
@@ -48,8 +58,13 @@ spec:
             - name: http
               containerPort: 11434
               protocol: TCP
+          {{- /* Guarded, because every entry here comes from values: emptying
+                 env and extraEnv otherwise renders a bare "env:" key with
+                 nothing under it. */}}
+          {{- with include "common.env" . }}
           env:
-            {{- include "common.env" . | nindent 12 }}
+            {{- . | nindent 12 }}
+          {{- end }}
           {{- include "common.probes" (dict "probes" .Values.probes "port" "http") | nindent 10 }}
           resources:
             {{- include "common.resources" . | nindent 12 }}

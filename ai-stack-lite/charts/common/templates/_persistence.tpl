@@ -98,7 +98,7 @@ Usage: include "common.chownInit" (dict "ctx" . "uid" 1024 "gid" 1024)
 {{- $uid := .uid -}}
 {{- $gid := .gid -}}
 - name: fix-volume-ownership
-  image: {{ .image | default "busybox:1.37" }}
+  image: {{ include "common.helperImage" (dict "ctx" $ctx "image" (.image | default "busybox:1.37")) }}
   imagePullPolicy: IfNotPresent
   securityContext:
     runAsUser: 0

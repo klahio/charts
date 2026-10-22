@@ -12,6 +12,7 @@ metadata:
   labels:
     {{- include "common.labels" . | nindent 4 }}
     {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 4 }}{{- end }}{{- end }}
+    {{- with .Values.podLabels }}{{- toYaml . | nindent 4 }}{{- end }}
   annotations:
     helm.sh/hook: test
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
@@ -21,7 +22,7 @@ spec:
   {{- include "common.scheduling" . | nindent 2 }}
   containers:
     - name: test
-      image: curlimages/curl:8.11.1
+      image: {{ include "common.helperImage" (dict "ctx" . "image" .Values.testImage) }}
       command:
         - /bin/sh
         - -c
@@ -35,8 +36,13 @@ spec:
           echo "comfyui ok"
           {{- if $g.enabled }}
           echo "checking that comfyui reports a device"
+          # Matched against the device entry, not the whole document. A bare
+          # "cuda" also matches an argv echoed back in system_stats, so a CPU
+          # install started with a cuda-related flag would pass a check meant
+          # to prove a device is present. Both forms below only appear where
+          # ComfyUI names an actual device.
           curl -sf --max-time 15 "http://{{ include "common.fullname" . }}:{{ .Values.service.port }}/system_stats" \
-            | grep -qi "cuda" || {
+            | grep -qiE '"type"[[:space:]]*:[[:space:]]*"cuda"|cuda:[0-9]' || {
               echo "FAIL: comfyui reports no CUDA device."
               echo "The GPU resource was allocated but the driver libraries did"
               echo "not reach the container. Check global.gpu.runtimeClassName."

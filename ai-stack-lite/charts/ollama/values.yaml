@@ -141,6 +141,19 @@ modelPuller:
     - llama3.2:3b
   #  - qwen2.5-coder:7b
   backoffLimit: 2
+  # How many three-second tries the Job gives the Ollama API before giving up.
+  #
+  # Bounded because the Job runs as a Helm hook and therefore blocks the
+  # install: an unbounded wait turns a StatefulSet that will never be Ready into
+  # a release that hangs until helm's own timeout and then reports only that the
+  # hook did not complete.
+  #
+  # The bound only helps if the Job reaches it before helm gives up, so one
+  # attempt has to fit inside helm's default timeout of 5m: 60 tries is 180s.
+  # backoffLimit retries multiply that, so the worst case is still longer than
+  # the default - which is why the install commands in the README pass a
+  # --timeout. Raise this only together with that timeout.
+  waitAttempts: 60
   resources:
     requests:
       cpu: 100m

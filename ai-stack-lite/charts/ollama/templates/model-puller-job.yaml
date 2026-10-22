@@ -21,10 +21,8 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "common.selectorLabels" . | nindent 8 }}
+        {{- include "common.podLabels" . | nindent 8 }}
         ai-stack-lite/job: model-puller
-        {{- with .Values.podLabels }}{{- toYaml . | nindent 8 }}{{- end }}
-        {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 8 }}{{- end }}{{- end }}
     spec:
       restartPolicy: OnFailure
       {{- include "common.imagePullSecrets" . | nindent 6 }}
@@ -43,7 +41,23 @@ spec:
             - |
               set -e
               echo "waiting for ollama at $OLLAMA_HOST"
-              until ollama list >/dev/null 2>&1; do sleep 3; done
+              # Bounded, and the bound is sized to fire inside helm's default
+              # timeout. An unbounded loop would hang this hook, and the hook
+              # blocks the install, until helm gave up and reported only that
+              # the hook did not complete - with no indication that the API
+              # never answered. See modelPuller.waitAttempts in values.yaml for
+              # how this interacts with backoffLimit and --timeout.
+              i=0
+              until ollama list >/dev/null 2>&1; do
+                i=$((i + 1))
+                if [ "$i" -ge {{ .Values.modelPuller.waitAttempts | int }} ]; then
+                  echo "FAIL: no answer from the ollama API at $OLLAMA_HOST after $((i * 3))s." >&2
+                  echo "The StatefulSet is probably not Ready. Check it with:" >&2
+                  echo "  kubectl -n {{ .Release.Namespace }} describe statefulset {{ include "common.fullname" . }}" >&2
+                  exit 1
+                fi
+                sleep 3
+              done
               {{- range .Values.modelPuller.models }}
               echo "pulling {{ . }}"
               ollama pull {{ . | quote }}

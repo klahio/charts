@@ -48,7 +48,7 @@ spec:
       nodePort: {{ .Values.service.nodePort }}
       {{- end }}
   selector:
-    {{- include "common.selectorLabels" . | nindent 4 }}
+    {{- include "common.serviceSelectorLabels" . | nindent 4 }}
 {{- end -}}
 
 {{- define "common.ingress" -}}

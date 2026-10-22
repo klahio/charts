@@ -10,6 +10,9 @@ image:
   # kernels that do not cover Blackwell cards, so they fail on recent hardware
   # with "no kernel image is available for execution on the device".
   repository: mmartial/comfyui-nvidia-docker
+  # Keep this set. Cleared, the chart falls back to Chart.yaml appVersion, which
+  # names the upstream ComfyUI release this image carries and is not a tag of
+  # the image itself, so the pull fails on a tag that does not exist.
   tag: "ubuntu24_cuda13.4-20261018"
   digest: ""
   pullPolicy: IfNotPresent
@@ -91,6 +94,12 @@ persistence:
   # Everything ComfyUI treats as data: configuration, the user directory, and
   # the two subtrees mounted below. Giving this its own claim is what makes the
   # path exist, which the base directory check requires.
+  #
+  # Keep it enabled. Disabling it drops the BASE_DIRECTORY setting, so ComfyUI
+  # falls back to its own directory inside the image while the models and output
+  # claims stay mounted under /basedir - weights on disk that nothing reads, and
+  # renders written to a tree the running ComfyUI has no interest in. Change
+  # mountPath to move it; do not turn it off.
   basedir:
     enabled: true
     size: 5Gi
@@ -128,6 +137,22 @@ persistence:
 #
 # Other values: lowvram, novram, highvram, gpu-only, cpu. highvram and gpu-only
 # pin weights in VRAM and will starve anything else on the same GPU.
+#
+# With GPU support off, "default" resolves to --cpu instead of to no flag,
+# because ComfyUI exits at startup when it cannot find a CUDA device. Naming a
+# mode explicitly overrides that.
+vramMode: default
+
+# GB of VRAM to leave free for other software, passed as --reserve-vram.
+#
+# This is the knob for a shared card. Reserving a couple of gigabytes keeps
+# ComfyUI from expanding into the memory Ollama needs for the model it is about
+# to load. Empty leaves ComfyUI's own platform-dependent default in place.
+reserveVram: ""
+
+# Extra ComfyUI command line flags, appended after the flags above.
+extraArgs: []
+
 # First boot has no weights. ComfyUI ships none, and an install that comes up
 # with an empty checkpoint list fails at the first node of every workflow, which
 # reads as a broken chart rather than a missing download. Each entry below is
@@ -151,18 +176,6 @@ modelDownloader:
 # deadline makes `helm install --wait` report failure while the pod is still
 # making progress.
 progressDeadlineSeconds: 3600
-
-vramMode: default
-
-# GB of VRAM to leave free for other software, passed as --reserve-vram.
-#
-# This is the knob for a shared card. Reserving a couple of gigabytes keeps
-# ComfyUI from expanding into the memory Ollama needs for the model it is about
-# to load. Empty leaves ComfyUI's own platform-dependent default in place.
-reserveVram: ""
-
-# Extra ComfyUI command line flags, appended after the flags above.
-extraArgs: []
 
 # File ownership for the mounted volumes. The image's init script insists on
 # owning its directories as this uid and gid, and refuses to start otherwise.
@@ -227,6 +240,11 @@ probes:
     # restarts the pod in the middle of a user's render.
     periodSeconds: 60
     failureThreshold: 10
+
+# The image the helm test pods use to make HTTP requests. Pinned, and routed
+# through global.imageRegistry like every other image, so a mirrored cluster can
+# pull it.
+testImage: curlimages/curl:8.17.0
 
 serviceAccount:
   create: true

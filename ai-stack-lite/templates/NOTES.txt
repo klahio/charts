@@ -1,3 +1,32 @@
+{{- /*
+Object names, resolved the way each subchart's common.fullname resolves them,
+so the commands below stay correct when a component carries a name override.
+The port comes from the same values the Service is built from, for the same
+reason: printing 8080 at a release that moved the port sends the reader to a
+port-forward that cannot connect.
+*/}}
+{{- $ow := index .Values "open-webui" }}
+{{- $ol := index .Values "ollama" }}
+{{- $cf := index .Values "comfyui" }}
+{{- /* The whole rule, not just the prefix: common.fullname drops the chart name
+       when the release name already contains it, then truncates to 63 and trims
+       a trailing dash. Printing only "<release>-<chart>" tells a release called
+       "ollama" to exec into "ollama-ollama", which does not exist. */}}
+{{- define "ai-stack-lite.componentName" -}}
+{{- $name := .nameOverride | default .chart -}}
+{{- if .fullnameOverride -}}
+{{- .fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else if contains $name .release -}}
+{{- .release | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .release $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- $owName := include "ai-stack-lite.componentName" (dict "release" .Release.Name "chart" "open-webui" "nameOverride" $ow.nameOverride "fullnameOverride" $ow.fullnameOverride) }}
+{{- $olName := include "ai-stack-lite.componentName" (dict "release" .Release.Name "chart" "ollama" "nameOverride" $ol.nameOverride "fullnameOverride" $ol.fullnameOverride) }}
+{{- $cfName := include "ai-stack-lite.componentName" (dict "release" .Release.Name "chart" "comfyui" "nameOverride" $cf.nameOverride "fullnameOverride" $cf.fullnameOverride) }}
+{{- $owPort := ($ow.service | default dict).port | default 8080 }}
+{{- $cfPort := ($cf.service | default dict).port | default 8188 }}
 ai-stack-lite {{ .Chart.Version }} installed as {{ .Release.Name }} in {{ .Release.Namespace }}.
 
 Components:
@@ -24,12 +53,12 @@ Reach the chat frontend:
   Served through the Gateway named in open-webui.route.parentRefs. Check the
   route attached as expected:
 
-    kubectl -n {{ $.Release.Namespace }} get httproute {{ $.Release.Name }}-open-webui -o yaml
+    kubectl -n {{ $.Release.Namespace }} get httproute {{ $owName }} -o yaml
 {{- else }}
 
-  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }}-open-webui 8080:8080
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $owName }} {{ $owPort }}:{{ $owPort }}
 
-  then open http://localhost:8080
+  then open http://localhost:{{ $owPort }}
 
   To expose it instead, enable one of open-webui.ingress or open-webui.route.
   Which one depends on whether your cluster runs an ingress controller or a
@@ -42,21 +71,27 @@ The first account you register becomes the administrator.
 
 {{- if index .Values "ollama" "enabled" }}
 
-{{- $models := (index .Values "ollama" "modelPuller" | default dict).models }}
+{{- /* Both conditions, exactly as model-puller-job.yaml gates the Job. Reading
+       only the list would announce a pull that never happened, because the
+       subchart's default list survives setting modelPuller.enabled=false. */}}
+{{- $mp := (index .Values "ollama" "modelPuller" | default dict) }}
+{{- $models := ternary $mp.models (list) (eq $mp.enabled true) }}
 {{- if $models }}
-Pulled on install by a Job, which may still be running:
+
+Pulled by a post-install Job, which Helm waited for before printing this:
 {{ range $models }}
   {{ . }}
 {{- end }}
 
-  kubectl -n {{ .Release.Namespace }} logs job/{{ .Release.Name }}-ollama-model-puller
+  kubectl -n {{ .Release.Namespace }} logs job/{{ $olName }}-model-puller
 
 Pull another at any time:
 {{- else }}
+
 No models are installed. Pull one:
 {{- end }}
 
-  kubectl -n {{ .Release.Namespace }} exec -it statefulset/{{ .Release.Name }}-ollama -- ollama pull llama3.2:3b
+  kubectl -n {{ .Release.Namespace }} exec -it statefulset/{{ $olName }} -- ollama pull qwen2.5-coder:7b
 
 Weights land on a PersistentVolumeClaim annotated helm.sh/resource-policy: keep,
 so they survive a helm uninstall. Delete the claim by hand when you actually
@@ -65,8 +100,10 @@ want the space back.
 
 {{- if index .Values "comfyui" "enabled" }}
 
-{{- $ckpts := (.Values.comfyui.modelDownloader | default dict).models }}
+{{- $dl := .Values.comfyui.modelDownloader | default dict }}
+{{- $ckpts := ternary $dl.models (list) (eq $dl.enabled true) }}
 {{- if $ckpts }}
+
 ComfyUI fetches its weights before it starts, so a first install leaves the pod
 in Init until they are on disk:
 {{ range $ckpts }}
@@ -74,18 +111,55 @@ in Init until they are on disk:
 {{- end }}
 {{- end }}
 
-ComfyUI has no Ingress and no authentication. Reach it over a port-forward:
+{{- /* ComfyUI has the same ingress and route templates as the frontend, so
+       stating flatly that it has no Ingress is wrong on a release that enabled
+       one - and that is the release where the warning below matters most. */}}
+{{- if or (and $cf.ingress $cf.ingress.enabled) (and $cf.route $cf.route.enabled) }}
 
-  kubectl -n {{ .Release.Namespace }} port-forward deploy/{{ .Release.Name }}-comfyui 8188:8188
+ComfyUI is exposed outside the cluster at:
+{{- if and $cf.ingress $cf.ingress.enabled }}
+
+  http{{ if $cf.ingress.tls }}s{{ end }}://{{ $cf.ingress.host }}
+{{- end }}
+{{- if and $cf.route $cf.route.enabled }}
+{{- range $cf.route.hostnames }}
+
+  https://{{ . }}
+{{- end }}
 {{- end }}
 
+  ComfyUI has no authentication of its own, and its workflow API can read and
+  write files inside the container. Anyone who reaches that address has it.
+  Put an authenticating proxy in front of it or restrict it at the network.
+{{- else }}
+
+ComfyUI has no Ingress and no authentication. Reach it over a port-forward:
+
+  kubectl -n {{ .Release.Namespace }} port-forward deploy/{{ $cfName }} {{ $cfPort }}:{{ $cfPort }}
+{{- end }}
+{{- end }}
+
+{{- /* The verification command has to name a workload that exists. Ollama is
+       a StatefulSet and ComfyUI a Deployment, and either one can be the only
+       GPU component in the release, so pick whichever is actually installed
+       rather than always pointing at Ollama. */}}
 {{- $g := .Values.global.gpu }}
-{{- if $g.enabled }}
+{{- $gpuOllama := and $g.enabled (index .Values "ollama" "enabled") }}
+{{- $gpuComfy := and $g.enabled (index .Values "comfyui" "enabled") }}
+{{- if or $gpuOllama $gpuComfy }}
 
 Verify the GPU reached the containers:
+{{ if $gpuOllama }}
+  kubectl -n {{ .Release.Namespace }} exec statefulset/{{ $olName }} -- nvidia-smi -L
+{{- end }}
+{{- if $gpuComfy }}
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ $cfName }} -- nvidia-smi -L
+{{- end }}
 
-  kubectl -n {{ .Release.Namespace }} exec statefulset/{{ .Release.Name }}-ollama -- nvidia-smi -L
-{{- else }}
+Or run the chart's own checks, which assert the same thing:
+
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }} --logs
+{{- else if not $g.enabled }}
 
 GPU support is off, so inference runs on CPU. Expect single-digit tokens per
 second even on small models.

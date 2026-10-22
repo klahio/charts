@@ -2,11 +2,14 @@
 
 A Helm chart for a self-hosted AI stack on an on-prem Kubernetes cluster.
 
-| Component | Role | Exposed |
+| Component | Role | How it is reached |
 |---|---|---|
-| Ollama | LLM inference engine, holds the model weights | cluster-internal |
-| Open WebUI | chat frontend | Ingress or HTTPRoute |
+| Ollama | LLM inference engine, holds the model weights | cluster-internal only |
+| Open WebUI | chat frontend | port-forward, or an Ingress or HTTPRoute you enable |
 | ComfyUI | image generation workflows | port-forward |
+
+Nothing is exposed outside the cluster by default. Open WebUI is the only
+component meant to be, and the only one with a login.
 
 Each component is a subchart and can be switched off on its own. A library chart
 under `charts/common` holds the template helpers the three share, so naming,
@@ -37,8 +40,12 @@ From the published repository:
 ```bash
 helm repo add klahio https://charts.klah.io
 helm repo update
-helm install ai klahio/ai-stack-lite -n ai-stack --create-namespace
+helm install ai klahio/ai-stack-lite -n ai-stack --create-namespace --timeout 30m
 ```
+
+The timeout is not decoration: a default install pulls a model before Helm
+reports success, which outruns the five-minute default. See
+[What a default install downloads](#what-a-default-install-downloads).
 
 From a checkout of this repository, where this chart is the `ai-stack-lite`
 directory:
@@ -70,15 +77,23 @@ downloaded twice: both checks are for a file that is already there.
 | `llama3.2:3b` | Ollama registry | ~2 GB | `ollama.modelPuller.models` |
 | `v1-5-pruned-emaonly.safetensors` | Hugging Face | ~4 GB | `comfyui.modelDownloader.models` |
 
-The LLM is pulled by a post-install Job, so it lands after the release is
-reported installed. The checkpoint is fetched by an init container, which means
-the ComfyUI pod stays `Init` until it is on disk; on a slow link a first install
-takes a while to go Ready, and `helm install --wait` should be given a timeout
-to match:
+Both downloads happen during the install, and both can outlast Helm's default
+five-minute timeout on a slow link. Give the install a timeout that fits:
 
 ```bash
-helm install ai klahio/ai-stack-lite -n ai-stack --create-namespace --wait --timeout 30m
+helm install ai klahio/ai-stack-lite -n ai-stack --create-namespace --timeout 30m
 ```
+
+The LLM is pulled by a `post-install` Job. Helm waits for a hook to finish
+whether or not `--wait` was passed, so the pull blocks the install rather than
+running behind it, and the release is not reported deployed until the Job
+completes. If the pull cannot succeed, the Job exhausts
+`ollama.modelPuller.backoffLimit` and the install is marked failed even though
+the stack itself is fine; the pods keep running and the models can be pulled by
+hand afterwards.
+
+The checkpoint is fetched by an init container, so the ComfyUI pod stays `Init`
+until it is on disk. That one is only waited on under `--wait`.
 
 To install with nothing at all and manage weights yourself:
 
@@ -143,9 +158,41 @@ silently ignore a route for `ai.local`: the route is created, reports nothing
 useful, and the name does not resolve to anything. The install-time checks catch
 this and print the listener hostnames the Gateway will actually accept.
 
-The same applies to the listener's `allowedRoutes`. A listener set to `Same`
-only accepts routes from the Gateway's own namespace, so a route in your release
-namespace has to target a listener that allows `All`.
+The listener's `allowedRoutes` matters the same way, and the install-time checks
+do **not** cover it: a listener set to `Same` accepts routes only from the
+Gateway's own namespace, so a route in your release namespace needs a listener
+that allows `All`. Get that wrong and the route is created and attaches to
+nothing, with the reason visible only in the route's own status:
+
+```bash
+kubectl -n <release-namespace> get httproute <release>-open-webui -o jsonpath='{.status.parents[*].conditions}'
+```
+
+## Turning a component off
+
+Each component can be switched off on its own, but Helm gives a subchart no view
+of its siblings, so Open WebUI cannot tell that something it points at is gone.
+Disabling a component means disabling the wiring for it too:
+
+```yaml
+# no Ollama
+ollama:
+  enabled: false
+open-webui:
+  ollama:
+    enabled: false
+
+# no ComfyUI
+comfyui:
+  enabled: false
+open-webui:
+  imageGeneration:
+    enabled: false
+```
+
+Left wired, the frontend is configured for an endpoint that does not exist and
+`helm test` fails on exactly that. `values-cpu.yaml` is the worked example: it
+drops ComfyUI and turns off image generation in the same file.
 
 ## GPU setup
 
@@ -242,8 +289,11 @@ keep each one willing to release memory when idle:
 - `OLLAMA_KEEP_ALIVE` is `5m`, so an idle model is unloaded. Setting it to `-1`
   pins the model in VRAM, which makes the first token faster and makes
   concurrent image generation much more likely to fail.
-- ComfyUI runs with `--normalvram`, which unloads models between runs.
-  `--highvram` pins them and will starve anything else on the card.
+- ComfyUI runs in its default VRAM mode, which passes no flag and leaves the
+  dynamic VRAM manager on, so models are unloaded to system RAM between runs.
+  `comfyui.vramMode: highvram` or `gpu-only` pins them and will starve anything
+  else on the card. Use `comfyui.reserveVram` to hold a couple of gigabytes back
+  for whatever shares the device.
 
 In practice, with one user alternating between chat and image generation, a 16 GB
 card handles both. Simultaneous peaks are what break, not coexistence.
@@ -255,8 +305,12 @@ card handles both. Simultaneous peaks are what break, not coexistence.
 ```
 
 Ollama falls back to CPU inference. Expect single-digit tokens per second even on
-small models. ComfyUI on CPU is slow enough to be useless, which is why
-`values-cpu.yaml` leaves it out.
+small models.
+
+ComfyUI left enabled will start: with GPU support off the chart passes `--cpu`,
+without which ComfyUI looks for a CUDA device and exits. It is still slow enough
+to be useless for real work, which is why `values-cpu.yaml` leaves it out
+rather than relying on that flag.
 
 ## Testing an install
 
@@ -273,13 +327,29 @@ The tests retry for a bounded period rather than failing on the first attempt,
 since `helm test` can start before a Recreate rollout has finished. A test that
 races the thing it tests gets ignored, which is worse than not having it.
 
+The GPU check runs in its own pod, which requests a GPU of its own. On a card
+time-sliced just far enough for the components, every slice is already taken and
+the test pod sits Pending until `helm test` gives up. Advertise one more replica
+than the stack uses, or skip the tests on a fully committed card. With
+`global.gpu.count` at `0`, or GPU support off, the GPU tests are not rendered at
+all.
+
 ## Install-time checks
 
 Rather than letting a misconfiguration turn into Pending pods, the chart queries
 the cluster during install and fails with a message that says what to do. It
-checks that a node advertises `nvidia.com/gpu`, that enough are advertised for
-what the components request, that the named RuntimeClass exists, and that a
-default StorageClass exists when a volume does not name one.
+checks that a node advertises `nvidia.com/gpu`, that the cluster advertises at
+least as many as the component being rendered asks for, that the named
+RuntimeClass exists, and that a default StorageClass exists when a volume does
+not name one.
+
+The GPU count check is per component and against the cluster total, because each
+subchart's checks run on their own and cannot see their siblings. It therefore
+catches a component asking for more than exists anywhere, and not two components
+that fit individually and not together: on one card advertising one GPU, Ollama
+and ComfyUI both pass and one of them then stays Pending. Nor does it prove any
+single node can satisfy one pod's whole request. Advertise at least one GPU per
+GPU component, plus one for the `helm test` pods described above.
 
 The checks use Helm's `lookup`, which returns nothing during client-side
 rendering. So they run on `helm install` and on `helm install --dry-run=server`,
@@ -423,14 +493,19 @@ kubectl -n ai-stack exec -it statefulset/ai-ollama -- ollama pull qwen2.5-coder:
 
 That runs as a `post-install` hook, not `post-upgrade`, so a slow link cannot
 stall every later upgrade. It pulls through the Ollama API, so it needs no GPU
-and makes no second copy of the weights.
+and makes no second copy of the weights. Helm waits for the hook, so a first
+install takes as long as the pull does; see
+[What a default install downloads](#what-a-default-install-downloads) for the
+timeout that needs.
 
 ## Security notes
 
-Open WebUI is the only component with an Ingress by default. Neither Ollama nor
-ComfyUI has any authentication of its own, so exposing either one publishes an
-open endpoint. ComfyUI's workflow API can read and write files inside its
-container.
+Nothing is exposed outside the cluster by default; all three components start
+reachable only over `kubectl port-forward`. Open WebUI is the only one meant to
+be exposed, and the only one with an authentication layer. Neither Ollama nor
+ComfyUI has any authentication of its own, so enabling an Ingress or an HTTPRoute
+on either one publishes an open endpoint. ComfyUI's workflow API can read and
+write files inside its container.
 
 Open WebUI's session signing key is generated on first install and read back from
 the existing Secret on upgrade, so an upgrade does not log everyone out. It is
@@ -472,6 +547,8 @@ Settings that apply to the whole stack live under `global`.
 | `comfyui.modelDownloader.models` | SD 1.5 checkpoint | Fetched by an init container before ComfyUI starts. |
 | `open-webui.imageGeneration.enabled` | `true` | Points the image button at this release's ComfyUI. |
 | `comfyui.progressDeadlineSeconds` | `3600` | First boot builds a virtualenv and downloads weights. |
+| `open-webui.clusterDomain` | `cluster.local` | Only needed on a cluster built with another DNS domain. |
+| `global.imageRegistry` | `""` | Prefixes every image, the busybox and curl helpers included. |
 
 GPU precedence runs built-in default, then `global.gpu`, then the component's own
 `gpu` block, resolved key by key. Ollama and ComfyUI leave their component block

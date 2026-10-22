@@ -1,5 +1,6 @@
 # Open WebUI is the chat frontend. It is the only component meant to be reached
-# from outside the cluster, so it is the only one with Ingress on by default.
+# from outside the cluster, and the only one with authentication of its own.
+# Exposure is still off by default: see the ingress and route blocks below.
 
 nameOverride: ""
 fullnameOverride: ""
@@ -79,8 +80,20 @@ persistence:
     mountPath: /app/backend/data
     resourcePolicy: keep
 
+# The cluster's DNS domain, used to build the sibling service URLs below.
+# "cluster.local" is the default almost everywhere but it is a cluster-level
+# setting, not something a chart can read, so a cluster built with a different
+# one has to say so here or set the urls explicitly.
+clusterDomain: cluster.local
+
 # Connection to Ollama. When the umbrella chart installs both, leave url empty
 # and the in-cluster service name is derived automatically.
+#
+# That derivation reproduces Ollama's fullname rule and assumes its default port,
+# because Helm gives this subchart no view of its sibling's values. Set url
+# explicitly whenever that guess cannot hold: an ollama with nameOverride or
+# fullnameOverride set, a non-default ollama.service.port, or an Ollama in
+# another namespace or another release.
 ollama:
   enabled: true
   url: ""
@@ -97,7 +110,8 @@ imageGeneration:
   enabled: true
   engine: comfyui
   comfyui:
-    # Defaults to the ComfyUI service of this release.
+    # Defaults to the ComfyUI service of this release, derived the same way and
+    # with the same caveats as ollama.url above.
     url: ""
   # Must name a checkpoint ComfyUI actually has. The default matches the one
   # comfyui.modelDownloader fetches.
@@ -137,8 +151,14 @@ auth:
   # Point at a Secret you manage yourself instead. Takes precedence over
   # secretKey. The Secret must have a WEBUI_SECRET_KEY key.
   existingSecret: ""
-  # Set false to drop the login screen. Only sane on a trusted network, because
-  # it gives every visitor full access including the admin panel.
+  # Whether new visitors can register an account. This does not remove the login
+  # screen; existing accounts still have to sign in. Set it false once the admin
+  # account exists, so nobody else can register on a reachable host.
+  #
+  # The setting that removes authentication altogether is WEBUI_AUTH, under env
+  # below. Turning that off gives every visitor full access including the admin
+  # panel, and Open WebUI cannot be switched back to an authenticated install
+  # afterwards without clearing its database.
   enableSignup: true
 
 env:
@@ -182,6 +202,11 @@ probes:
   liveness:
     enabled: true
     path: /health
+
+# The image the helm test pods use to make HTTP requests. Pinned, and routed
+# through global.imageRegistry like every other image, so a mirrored cluster can
+# pull it.
+testImage: curlimages/curl:8.17.0
 
 serviceAccount:
   create: true

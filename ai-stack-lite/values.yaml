@@ -41,6 +41,15 @@ global:
   imageRegistry: ""
   imagePullSecrets: []
 
+# Switching a component off here removes its objects, but it does not rewire
+# the components that talk to it: Helm gives a subchart no view of its siblings,
+# so Open WebUI cannot tell that the thing it points at is gone. Turning one off
+# means turning off the matching wiring too, otherwise the frontend is
+# configured for an endpoint that does not exist and its helm test fails on it.
+# values-cpu.yaml is the worked example.
+#
+#   ollama.enabled=false   -> also open-webui.ollama.enabled=false
+#   comfyui.enabled=false  -> also open-webui.imageGeneration.enabled=false
 ollama:
   enabled: true
 

@@ -45,6 +45,24 @@ back to the chart appVersion so values.yaml never has to carry "latest".
 {{- end -}}
 {{- end -}}
 
+{{/*
+A helper image reference: the busybox and curl images the init containers and
+the test pods use.
+
+These go through global.imageRegistry like the component images do. Left out,
+a cluster that mirrors everything into a private registry gets a stack whose
+three application images resolve and whose init containers cannot pull, so
+install fails at an ImagePullBackOff on busybox rather than on anything the
+operator chose.
+
+Usage: include "common.helperImage" (dict "ctx" . "image" "busybox:1.37")
+*/}}
+{{- define "common.helperImage" -}}
+{{- $img := .image -}}
+{{- with .ctx.Values.global }}{{- with .imageRegistry }}{{- $img = printf "%s/%s" . $img -}}{{- end }}{{- end -}}
+{{- $img -}}
+{{- end -}}
+
 {{- define "common.imagePullSecrets" -}}
 {{- $secrets := .Values.imagePullSecrets | default list -}}
 {{- with .Values.global }}{{- with .imagePullSecrets }}{{- $secrets = concat $secrets . -}}{{- end }}{{- end -}}

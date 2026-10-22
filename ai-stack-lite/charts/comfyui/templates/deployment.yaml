@@ -1,4 +1,14 @@
 {{- include "common.preflight" . }}
+{{- include "comfyui.checkPaths" . }}
+{{- /* A RollingUpdate here starts the replacement pod before the old one is
+       gone, and the claims are ReadWriteOnce, so the new pod waits for a volume
+       the old one still holds until progressDeadlineSeconds expires and the
+       upgrade fails. The value is left configurable for an image on RWX
+       storage; it is checked so that setting it is a decision rather than a
+       discovery. */}}
+{{- if ne .Values.strategy.type "Recreate" }}
+{{- fail (printf "\n\nai-stack-lite: comfyui.strategy.type is %q.\n\nThe ComfyUI volumes are ReadWriteOnce, so a RollingUpdate deadlocks: the new pod\ncannot attach a claim the outgoing pod still holds, and the upgrade fails when\nprogressDeadlineSeconds expires.\n\nUse Recreate, or move the claims to ReadWriteMany storage first and waive this\nwith comfyui.strategy.type set deliberately after changing accessMode.\n" .Values.strategy.type) }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,9 +29,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "common.selectorLabels" . | nindent 8 }}
-        {{- with .Values.podLabels }}{{- toYaml . | nindent 8 }}{{- end }}
-        {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 8 }}{{- end }}{{- end }}
+        {{- include "common.servingPodLabels" . | nindent 8 }}
       {{- with .Values.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
@@ -43,7 +51,7 @@ spec:
         {{- end }}
         {{- if and .Values.modelDownloader.enabled .Values.modelDownloader.models }}
         - name: fetch-models
-          image: {{ .Values.modelDownloader.image }}
+          image: {{ include "common.helperImage" (dict "ctx" . "image" .Values.modelDownloader.image) }}
           imagePullPolicy: IfNotPresent
           {{- /* Runs as root so the finished file can be handed to the uid the
                  image expects; ComfyUI's entrypoint refuses to start when a
@@ -70,14 +78,31 @@ spec:
                 curl -fL --retry 5 --retry-delay 5 -o "$dir/{{ .name }}.part" {{ .url | quote }}
                 mv "$dir/{{ .name }}.part" "$dir/{{ .name }}"
               fi
-              chown {{ $.Values.podUser.uid }}:{{ $.Values.podUser.gid }} "$dir" "$dir/{{ .name }}"
-              chmod 0775 "$dir"
+              chown {{ $.Values.podUser.uid }}:{{ $.Values.podUser.gid }} "$dir/{{ .name }}"
               chmod 0664 "$dir/{{ .name }}"
+              {{- /* Every level mkdir -p created, not just the leaf. A nested
+                     dir such as "checkpoints/sdxl" otherwise leaves the
+                     intermediate directory owned by root, and ComfyUI's
+                     entrypoint refuses to start on a model tree it does not
+                     own. */}}
+              p="$dir"
+              while [ "$p" != "$root" ] && [ "$p" != "/" ]; do
+                chown {{ $.Values.podUser.uid }}:{{ $.Values.podUser.gid }} "$p"
+                chmod 0775 "$p"
+                p=$(dirname "$p")
+              done
               {{- end }}
               echo "models ready"
           volumeMounts:
+            {{- /* The same subPath the main container gets. Mounting the claim
+                   root instead would write the checkpoints beside the subtree
+                   ComfyUI reads, so the download succeeds and the checkpoint
+                   list is still empty. */}}
             - name: models
               mountPath: {{ .Values.persistence.models.mountPath }}
+              {{- with .Values.persistence.models.subPath }}
+              subPath: {{ . }}
+              {{- end }}
           resources:
             {{- toYaml .Values.modelDownloader.resources | nindent 12 }}
         {{- end }}

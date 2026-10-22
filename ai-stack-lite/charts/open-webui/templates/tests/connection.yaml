@@ -11,6 +11,7 @@ metadata:
   labels:
     {{- include "common.labels" . | nindent 4 }}
     {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 4 }}{{- end }}{{- end }}
+    {{- with .Values.podLabels }}{{- toYaml . | nindent 4 }}{{- end }}
   annotations:
     helm.sh/hook: test
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
@@ -20,7 +21,7 @@ spec:
   {{- include "common.scheduling" . | nindent 2 }}
   containers:
     - name: test
-      image: curlimages/curl:8.11.1
+      image: {{ include "common.helperImage" (dict "ctx" . "image" .Values.testImage) }}
       command:
         - /bin/sh
         - -c

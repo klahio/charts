@@ -1,4 +1,10 @@
 {{- include "common.preflight" . }}
+{{- /* Same reasoning as the ComfyUI deployment: the data claim is
+       ReadWriteOnce, so a RollingUpdate waits for a volume the outgoing pod
+       still holds and the upgrade fails on the progress deadline. */}}
+{{- if ne .Values.strategy.type "Recreate" }}
+{{- fail (printf "\n\nai-stack-lite: open-webui.strategy.type is %q.\n\nThe Open WebUI data claim is ReadWriteOnce, so a RollingUpdate deadlocks: the\nnew pod cannot attach a claim the outgoing pod still holds.\n\nUse Recreate, or move persistence.data to ReadWriteMany storage first.\n" .Values.strategy.type) }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,14 +21,19 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "common.selectorLabels" . | nindent 8 }}
-        {{- with .Values.podLabels }}{{- toYaml . | nindent 8 }}{{- end }}
-        {{- with .Values.global }}{{- with .podLabels }}{{- toYaml . | nindent 8 }}{{- end }}{{- end }}
+        {{- include "common.servingPodLabels" . | nindent 8 }}
+      {{- /* Restart when the signing key changes, otherwise the running pod
+             keeps using the old one. Assembled as a dict so that an unreadable
+             existingSecret leaves out the annotation instead of emitting an
+             empty one. */}}
+      {{- $ann := deepCopy (default (dict) .Values.podAnnotations) }}
+      {{- with include "open-webui.authChecksum" . }}
+      {{- $_ := set $ann "checksum/auth" . }}
+      {{- end }}
+      {{- with $ann }}
       annotations:
-        {{- /* Restart when the signing key changes, otherwise the running pod
-               keeps using the old one. */}}
-        checksum/auth: {{ include "open-webui.secretKey" . | sha256sum }}
-        {{- with .Values.podAnnotations }}{{- toYaml . | nindent 8 }}{{- end }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       {{- include "common.imagePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "common.serviceAccountName" . }}

@@ -20,6 +20,17 @@ while the component that needs it waits for the resource.
     {{- end -}}
   {{- end -}}
 {{- end -}}
+{{/*
+A count of zero means no GPU, so it collapses to enabled: false rather than
+staying a separate state. Otherwise every consumer has to re-check the count:
+common.resources already omits the limit at zero, but a pod would still get the
+runtimeClassName, and the helm tests would still assert that a device is visible
+inside a container that was never given one. One rule here, and all of them
+agree.
+*/}}
+{{- if le ($out.count | int) 0 -}}
+{{- $_ := set $out "enabled" false -}}
+{{- end -}}
 {{- if not $out.enabled -}}
 {{- $_ := set $out "count" 0 -}}
 {{- $_ := set $out "runtimeClassName" "" -}}
