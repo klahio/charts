@@ -1,0 +1,25 @@
+# Layered on values-single-gpu.yaml by ci/gpu-install-check.sh, on the one-node
+# k3s cluster that infra/aws-gpu-ci/runner builds on a GPU instance. Unlike
+# ci/install-values.yaml this keeps the profile's images and resources: the
+# point of this run is the real CUDA images on a real card. What is cut down is
+# only what would make each run slow without testing anything more.
+
+ollama:
+  # Small enough to pull in seconds, large enough that Ollama offloads it to the
+  # GPU rather than deciding it is not worth the transfer.
+  modelPuller:
+    models:
+      - qwen2.5:0.5b
+
+comfyui:
+  # The same 5 MB file the CPU run uses, in place of the 4 GB checkpoint. The
+  # download path is exercised either way; the GPU run is about the device.
+  modelDownloader:
+    models:
+      - dir: vae_approx
+        name: taesd_decoder.safetensors
+        url: https://huggingface.co/madebyollin/taesd/resolve/main/taesd_decoder.safetensors
+
+open-webui:
+  imageGeneration:
+    enabled: true
