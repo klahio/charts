@@ -30,10 +30,14 @@ dump() {
 
 trap 'status=$?; [[ $status -ne 0 ]] && dump; cleanup; exit $status' EXIT
 
-echo "==> build the CPU-only ComfyUI image and load it into kind"
-comfy_image=ai-stack-lite-ci/comfyui-cpu:ci
-docker build -q -t "$comfy_image" ci/comfyui-cpu
-kind load docker-image "$comfy_image" --name "${KIND_CLUSTER_NAME:-charts-ci}"
+# Set COMFY_IMAGE_PRELOADED=1 on a cluster that is not kind, after putting
+# ai-stack-lite-ci/comfyui-cpu:ci into each node's image store by other means.
+if [[ "${COMFY_IMAGE_PRELOADED:-}" != 1 ]]; then
+  echo "==> build the CPU-only ComfyUI image and load it into kind"
+  comfy_image=ai-stack-lite-ci/comfyui-cpu:ci
+  docker build -q -t "$comfy_image" ci/comfyui-cpu
+  kind load docker-image "$comfy_image" --name "${KIND_CLUSTER_NAME:-charts-ci}"
+fi
 
 echo "==> helm install (values-cpu.yaml + ci/install-values.yaml)"
 helm install "$release" . \
