@@ -90,7 +90,7 @@ entries:
       artifacthub.io/prerelease: "true"
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-22T02:59:21.536599838Z"
+    created: "2026-10-24T21:18:20.182772434Z"
     dependencies:
     - name: common
       repository: ""
@@ -109,7 +109,7 @@ entries:
       version: 0.3.0
     description: Self-hosted AI stack for on-prem Kubernetes - Ollama for LLM inference,
       Open WebUI as the chat frontend, ComfyUI for image generation.
-    digest: 0d950ed410820055a465e4f95cb641b9b31db2f8703f183238a4cefb7a72b2e3
+    digest: 76ab7244aef1d4b250a269e5619bcace6f61c93835cc18721ed489c9aa36b636
     home: https://github.com/klahio/charts/tree/main/ai-stack-lite
     icon: https://raw.githubusercontent.com/klahio/charts/main/ai-stack-lite/icon.svg
     keywords:
@@ -164,7 +164,7 @@ entries:
       artifacthub.io/prerelease: "true"
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-22T02:59:21.534008969Z"
+    created: "2026-10-24T21:18:20.180098491Z"
     dependencies:
     - name: common
       repository: ""
@@ -236,7 +236,7 @@ entries:
       artifacthub.io/prerelease: "true"
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-22T02:59:21.531963607Z"
+    created: "2026-10-24T21:18:20.178252563Z"
     dependencies:
     - name: common
       repository: ""
@@ -306,7 +306,7 @@ entries:
       artifacthub.io/prerelease: "true"
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-22T02:59:21.530066829Z"
+    created: "2026-10-24T21:18:20.175889068Z"
     dependencies:
     - name: common
       repository: ""
@@ -376,7 +376,7 @@ entries:
       artifacthub.io/prerelease: "true"
     apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-10-22T02:59:21.527668746Z"
+    created: "2026-10-24T21:18:20.174025543Z"
     dependencies:
     - name: common
       repository: ""
@@ -421,4 +421,4 @@ entries:
     urls:
     - https://charts.klah.io/ai-stack-lite-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-22T02:59:21.52563416Z"
+generated: "2026-10-24T21:18:20.172019637Z"
