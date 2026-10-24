@@ -77,7 +77,10 @@ jobs:
 
       - name: wait for the node
         run: |
-          ssh_opts=(-i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$(dirname "$SSH_KEY")/known_hosts" -o ConnectTimeout=10)
+          # Keepalives because helm install --wait prints nothing for minutes
+          # while ComfyUI builds its virtualenv, and the runner's network drops
+          # a connection that has been silent for about four.
+          ssh_opts=(-i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$(dirname "$SSH_KEY")/known_hosts" -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=10)
           echo "SSH_OPTS=${ssh_opts[*]}" >> "$GITHUB_ENV"
           for _ in $(seq 1 60); do
             ssh "${ssh_opts[@]}" "$GPU_HOST" true 2>/dev/null && break
