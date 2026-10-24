@@ -3,3 +3,11 @@
 *.tgz
 .cr-release/
 .deploy/
+
+# Terraform working directories and state. The bootstrap root keeps local
+# state on purpose; it belongs somewhere safe, not in the repository.
+.terraform/
+*.tfstate
+*.tfstate.*
+# A local backend for trying a root by hand, outside CI.
+*_override.tf
