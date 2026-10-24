@@ -1,0 +1,67 @@
+# Layered on values-cpu.yaml by ci/install-check.sh, to install the stack into a
+# kind cluster on a GitHub runner: 4 vCPUs, 16 GB of memory, no GPU. The profile
+# itself asks for more than that, so the requests are cut down here rather than
+# in the profile, which describes a machine someone would actually run it on.
+#
+# ComfyUI is switched back on, but with ci/comfyui-cpu in place of the default
+# image, whose CUDA and first-boot virtualenv do not fit a runner's disk beside
+# the other two. install-check.sh builds that image and loads it into kind.
+
+ollama:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 4Gi
+  persistence:
+    models:
+      size: 2Gi
+  # Still exercises the post-install Job end to end, with a model small enough
+  # to pull in seconds.
+  modelPuller:
+    models:
+      - smollm2:135m
+
+open-webui:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+  persistence:
+    data:
+      size: 1Gi
+  # Back on, since ComfyUI is installed here.
+  imageGeneration:
+    enabled: true
+
+comfyui:
+  enabled: true
+  image:
+    repository: ai-stack-lite-ci/comfyui-cpu
+    tag: ci
+    # Loaded into the kind nodes, never pulled.
+    pullPolicy: Never
+  resources:
+    requests:
+      cpu: 200m
+      memory: 1Gi
+    limits:
+      memory: 4Gi
+  persistence:
+    run:
+      size: 1Gi
+    basedir:
+      size: 1Gi
+    models:
+      size: 1Gi
+    output:
+      size: 1Gi
+  # A 5 MB file in place of the 4 GB checkpoint. Still a real download, into a
+  # directory ComfyUI indexes, so install-check.sh can ask ComfyUI whether it
+  # sees the file where the downloader put it.
+  modelDownloader:
+    models:
+      - dir: vae_approx
+        name: taesd_decoder.safetensors
+        url: https://huggingface.co/madebyollin/taesd/resolve/main/taesd_decoder.safetensors

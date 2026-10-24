@@ -1,0 +1,89 @@
+#!/bin/bash
+# Turns a fresh Deep Learning AMI into a one-node k3s cluster that advertises
+# its GPU, so ai-stack-lite/ci/gpu-install-check.sh can install the single-GPU
+# profile onto it unchanged. The workflow waits on `cloud-init status --wait`
+# and then on the marker file written at the end; a failure anywhere here fails
+# cloud-init, which fails the wait.
+set -euxo pipefail
+
+# The backstop goes first, before anything that can fail or hang. With
+# instance_initiated_shutdown_behavior = terminate, this ends the instance.
+shutdown -h +${max_lifetime_minutes} "ai-stack-lite GPU CI: lifetime reached"
+
+export HOME=/root
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+# Fail here, with a clear cause, rather than later as a pod stuck Pending.
+nvidia-smi -L
+command -v nvidia-container-runtime
+
+# k3s finds nvidia-container-runtime on the host and registers it with its
+# containerd as the handler "nvidia". It does not make it the default, which is
+# exactly the situation global.gpu.runtimeClassName exists for. Traefik is left
+# out: nothing here is exposed through an ingress.
+curl -sfL https://get.k3s.io | \
+  INSTALL_K3S_VERSION='${k3s_version}' K3S_KUBECONFIG_MODE=644 \
+  sh -s - --disable traefik
+
+until kubectl get node "$(hostname)" >/dev/null 2>&1; do sleep 2; done
+kubectl wait --for=condition=Ready node --all --timeout=5m
+
+# Helm, checked against the published digest.
+tmp=$(mktemp -d)
+curl -fsSLo "$tmp/helm.tgz" "https://get.helm.sh/helm-${helm_version}-linux-amd64.tar.gz"
+curl -fsSLo "$tmp/helm.sha256" "https://get.helm.sh/helm-${helm_version}-linux-amd64.tar.gz.sha256sum"
+(cd "$tmp" && echo "$(awk '{print $1}' helm.sha256)  helm.tgz" | sha256sum -c -)
+tar -xzf "$tmp/helm.tgz" -C "$tmp"
+install -m 0755 "$tmp/linux-amd64/helm" /usr/local/bin/helm
+rm -rf "$tmp"
+
+# Newer k3s releases create this themselves; applying it either way means the
+# chart's preflight never depends on which release that was.
+kubectl apply -f - <<'EOF'
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: nvidia
+handler: nvidia
+EOF
+
+# The device plugin's chart only schedules onto nodes labelled as having a GPU,
+# which is normally node-feature-discovery's job. One node, one label.
+kubectl label node "$(hostname)" nvidia.com/gpu.present=true --overwrite
+
+# Time-sliced, as values-single-gpu.yaml describes, because Ollama and ComfyUI
+# each request a whole nvidia.com/gpu from the one card.
+cat >/root/nvdp-values.yaml <<'EOF'
+runtimeClassName: nvidia
+config:
+  map:
+    default: |-
+      version: v1
+      sharing:
+        timeSlicing:
+          resources:
+          - name: nvidia.com/gpu
+            replicas: ${gpu_replicas}
+EOF
+helm repo add nvdp https://nvidia.github.io/k8s-device-plugin
+helm repo update nvdp
+helm upgrade --install nvdp nvdp/nvidia-device-plugin \
+  --version '${device_plugin_version}' \
+  -n nvidia-device-plugin --create-namespace \
+  -f /root/nvdp-values.yaml --wait --timeout 10m
+
+# The chart's preflight reads allocatable at install time, so the install must
+# not start until the plugin has actually registered every replica.
+for _ in $(seq 1 60); do
+  gpus=$(kubectl get node "$(hostname)" -o jsonpath='{.status.allocatable.nvidia\.com/gpu}')
+  [ "$${gpus:-0}" -ge ${gpu_replicas} ] && break
+  sleep 5
+done
+[ "$${gpus:-0}" -ge ${gpu_replicas} ]
+
+# ubuntu, which the workflow logs in as, gets a working kubectl and helm.
+install -d -o ubuntu -g ubuntu /home/ubuntu/.kube
+install -m 0600 -o ubuntu -g ubuntu "$KUBECONFIG" /home/ubuntu/.kube/config
+
+install -d /var/lib/ai-stack-lite-ci
+touch /var/lib/ai-stack-lite-ci/ready
