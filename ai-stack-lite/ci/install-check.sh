@@ -45,8 +45,12 @@ helm install "$release" . \
   -f values-cpu.yaml -f ci/install-values.yaml \
   --wait --timeout 15m
 
+# No --logs: the test pods are deleted on success (hook-succeeded), and Helm
+# then fails the whole command fetching logs from a pod that is already gone,
+# after every test has passed. A failed test pod is kept, so dump() still
+# prints its logs when it matters.
 echo "==> helm test"
-helm test "$release" -n "$namespace" --logs --timeout 10m
+helm test "$release" -n "$namespace" --timeout 10m
 
 echo "==> the puller left the model in place"
 kubectl -n "$namespace" exec "statefulset/$release-ollama" -- ollama list \
@@ -79,6 +83,6 @@ helm upgrade "$release" . \
   -n "$namespace" \
   -f values-cpu.yaml -f ci/install-values.yaml \
   --wait --timeout 10m
-helm test "$release" -n "$namespace" --logs --timeout 10m
+helm test "$release" -n "$namespace" --timeout 10m
 
 echo "OK"
