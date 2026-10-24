@@ -105,14 +105,14 @@ data "aws_iam_policy_document" "trust" {
     condition {
       test     = "StringEquals"
       variable = "${local.oidc_url}:sub"
-      values   = ["repo:${var.github_repository}:environment:${var.github_environment}"]
+      values   = ["${var.github_subject_prefix}:environment:${var.github_environment}"]
     }
   }
 }
 
 resource "aws_iam_role" "gpu_ci" {
   name               = "klahio-charts-gpu-ci"
-  description        = "Assumed by the GPU workflow in ${var.github_repository} to create and destroy its test instance."
+  description        = "Assumed by the GPU workflow to create and destroy its test instance."
   assume_role_policy = data.aws_iam_policy_document.trust.json
   # The job holds these credentials from apply until destroy, and ComfyUI's
   # first boot alone can take most of an hour. A session that expired before

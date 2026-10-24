@@ -4,10 +4,18 @@ variable "region" {
   default     = "us-east-1"
 }
 
-variable "github_repository" {
-  description = "owner/name of the repository whose workflow may assume the role."
+variable "github_subject_prefix" {
+  description = <<-EOT
+    The repository part of the subject GitHub puts in its OIDC tokens. This
+    repository uses immutable subjects, which name the owner and repository by
+    ID as well as by name, so a repository deleted and recreated under the same
+    name cannot assume the role. Read it with
+    `gh api repos/<owner>/<repo>/actions/oidc/customization/sub` (the
+    sub_claim_prefix field); a repository without immutable subjects uses
+    "repo:<owner>/<repo>".
+  EOT
   type        = string
-  default     = "klahio/charts"
+  default     = "repo:klahio@343101638/charts@1428942907"
 }
 
 variable "github_environment" {
