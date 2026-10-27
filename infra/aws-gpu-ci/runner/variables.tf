@@ -4,11 +4,22 @@ variable "region" {
   default     = "us-east-1"
 }
 
+variable "name" {
+  description = <<-EOT
+    Name of the key pair and security group, and the Name tag on everything
+    else. Key pair and security group names are unique in an account, so each
+    workflow that runs this root concurrently with another needs its own.
+  EOT
+  type        = string
+  default     = "ai-stack-lite-gpu-ci"
+}
+
 variable "instance_type" {
   description = <<-EOT
     One NVIDIA GPU is all the single-GPU profile needs. g4dn.xlarge is a 16 GB
-    T4 at about $0.53/hour; g6.xlarge is a 24 GB L4 at about $0.80/hour. Must be
-    in the bootstrap's allowed_instance_types.
+    T4 at about $0.53/hour; g6.xlarge is a 24 GB L4 at about $0.80/hour;
+    g6e.xlarge is a 48 GB L40S at about $1.86/hour. Must be in the bootstrap's
+    allowed_instance_types.
   EOT
   type        = string
   default     = "g4dn.xlarge"
