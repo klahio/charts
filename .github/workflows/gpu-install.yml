@@ -1,0 +1,119 @@
+name: gpu-install
+
+# The GPU install test, shared by every workflow that runs it on a different
+# instance type. Each caller sets its own trigger, and passes the instance
+# type and a state key of its own, so a run whose destroy never happened is
+# picked up by the next run of the same caller and by no other.
+on:
+  workflow_call:
+    inputs:
+      instance_type:
+        description: Must be in the bootstrap role's allowed_instance_types.
+        type: string
+        required: true
+      state_key:
+        description: Object key of this caller's runner state in the state bucket, under gpu-runner/.
+        type: string
+        required: true
+      name:
+        description: Name given to the instance, its key pair and its network, so leftovers from different callers never collide.
+        type: string
+        required: true
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    # The AWS role trusts tokens for this environment and nothing else. Its
+    # protection rules, set in the repository settings, are where a required
+    # reviewer goes if every GPU run should be approved first.
+    environment: gpu-ci
+    # One GPU run at a time across every caller: the account's GPU quota fits
+    # one instance. Set here rather than in the callers, because a caller whose
+    # label is absent still starts a run, and at workflow level that skipped run
+    # would take the group's one pending slot from a real one.
+    concurrency:
+      group: gpu-ci
+      cancel-in-progress: false
+    timeout-minutes: 150
+    env:
+      TF_DIR: infra/aws-gpu-ci/runner
+      SSH_KEY: ${{ github.workspace }}/.gpu-ci/id_ed25519
+      TF_VAR_region: ${{ vars.AWS_REGION }}
+      TF_VAR_run_id: ${{ github.run_id }}
+      TF_VAR_instance_type: ${{ inputs.instance_type }}
+      TF_VAR_name: ${{ inputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_GPU_CI_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          # Long enough to outlast the job, so destroy never runs on expired
+          # credentials. The role allows up to three hours.
+          role-duration-seconds: 10800
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.4
+          terraform_wrapper: false
+
+      # A key that lives only for this run, and the one address allowed to use
+      # it. Written to GITHUB_ENV so the destroy step sees the same variables
+      # even when everything between failed.
+      - name: run key and runner address
+        run: |
+          mkdir -p "$(dirname "$SSH_KEY")"
+          ssh-keygen -q -t ed25519 -N '' -f "$SSH_KEY"
+          echo "TF_VAR_ssh_public_key=$(cat "$SSH_KEY.pub")" >> "$GITHUB_ENV"
+          echo "TF_VAR_ssh_ingress_cidr=$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')/32" >> "$GITHUB_ENV"
+
+      - name: terraform init
+        id: init
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=gpu-runner/${{ inputs.state_key }}" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="use_lockfile=true"
+
+      - name: terraform apply
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform apply -input=false -auto-approve
+          echo "GPU_HOST=$(terraform output -raw ssh_user)@$(terraform output -raw public_ip)" >> "$GITHUB_ENV"
+
+      - name: wait for the node
+        run: |
+          # Keepalives because helm install --wait prints nothing for minutes
+          # while ComfyUI builds its virtualenv, and the runner's network drops
+          # a connection that has been silent for about four.
+          ssh_opts=(-i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$(dirname "$SSH_KEY")/known_hosts" -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=10)
+          echo "SSH_OPTS=${ssh_opts[*]}" >> "$GITHUB_ENV"
+          for _ in $(seq 1 60); do
+            ssh "${ssh_opts[@]}" "$GPU_HOST" true 2>/dev/null && break
+            sleep 10
+          done
+          # Exits non-zero if user data failed, which fails this step with the
+          # reason one step below.
+          ssh "${ssh_opts[@]}" "$GPU_HOST" 'cloud-init status --wait --long; test -f /var/lib/ai-stack-lite-ci/ready'
+
+      - name: copy the chart
+        run: rsync -az --delete -e "ssh $SSH_OPTS" ai-stack-lite/ "$GPU_HOST:ai-stack-lite/"
+
+      - name: install and test on the GPU
+        run: ssh $SSH_OPTS "$GPU_HOST" 'nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv && ai-stack-lite/ci/gpu-install-check.sh'
+
+      - name: node setup log
+        if: failure() && env.GPU_HOST != ''
+        run: ssh $SSH_OPTS "$GPU_HOST" 'sudo tail -n 200 /var/log/cloud-init-output.log' || true
+
+      # Runs whenever init got far enough to know where the state is, including
+      # after a failed or cancelled apply. If this step never runs at all, the
+      # instance still terminates itself at max_lifetime_minutes, and the next
+      # run of the same caller takes over the rest from the shared state.
+      - name: terraform destroy
+        if: always() && steps.init.outcome == 'success'
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform destroy -input=false -auto-approve

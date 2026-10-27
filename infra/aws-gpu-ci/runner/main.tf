@@ -5,7 +5,7 @@
 # the runner to reach it.
 
 locals {
-  name = "ai-stack-lite-gpu-ci"
+  name = var.name
 }
 
 # Not every zone carries every GPU type. Placing the subnet by looking this up

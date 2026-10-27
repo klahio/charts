@@ -42,7 +42,7 @@ variable "create_oidc_provider" {
 variable "allowed_instance_types" {
   description = "Instance types the role may launch. Anything else is denied, so a typo in a workflow cannot start a p5."
   type        = list(string)
-  default     = ["g4dn.xlarge", "g6.xlarge"]
+  default     = ["g4dn.xlarge", "g6.xlarge", "g6e.xlarge"]
 }
 
 variable "state_bucket_name" {

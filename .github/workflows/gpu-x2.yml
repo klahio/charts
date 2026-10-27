@@ -1,0 +1,22 @@
+name: gpu-x2
+
+# The same install test as gpu.yml on the next card up: one 48 GB L40S
+# instead of a 16 GB T4, at roughly three and a half times the hourly price.
+# Runs by hand, or on a pull request carrying the ci:gpu-x2 label.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  l40s:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci:gpu-x2')
+    uses: ./.github/workflows/gpu-install.yml
+    with:
+      instance_type: g6e.xlarge
+      state_key: x2.tfstate
+      name: ai-stack-lite-gpu-x2-ci
